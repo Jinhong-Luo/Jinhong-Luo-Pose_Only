@@ -1,0 +1,11 @@
+data/raw/strecha/fountain-P11\images\0000.jpg
+data/raw/strecha/fountain-P11\images\0001.jpg
+data/raw/strecha/fountain-P11\images\0002.jpg
+data/raw/strecha/fountain-P11\images\0003.jpg
+data/raw/strecha/fountain-P11\images\0004.jpg
+data/raw/strecha/fountain-P11\images\0005.jpg
+data/raw/strecha/fountain-P11\images\0006.jpg
+data/raw/strecha/fountain-P11\images\0007.jpg
+data/raw/strecha/fountain-P11\images\0008.jpg
+data/raw/strecha/fountain-P11\images\0009.jpg
+data/raw/strecha/fountain-P11\images\0010.jpg
