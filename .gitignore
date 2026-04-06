@@ -25,23 +25,16 @@ data/processed/
 runs/
 outputs/
 logs/
+archive/
 
 # Cache
 .cache/
 *.log
 
 # Large third-party stuff if needed
+third_party/
 third_party/**/weights/
 third_party/**/checkpoints/
 
-# Keep prepared benchmark metadata / GT snapshots under version control
-!data/prepared/
-!data/prepared/strecha/
-!data/prepared/strecha/fountain-P11/
-!data/prepared/strecha/fountain-P11/K.npy
-!data/prepared/strecha/fountain-P11/R_abs_gt_c2w.npy
-!data/prepared/strecha/fountain-P11/R_abs_gt_w2c.npy
-!data/prepared/strecha/fountain-P11/gt_centers.npy
-!data/prepared/strecha/fountain-P11/gt_poses_c2w.txt
-!data/prepared/strecha/fountain-P11/gt_poses_w2c.txt
-!data/prepared/strecha/fountain-P11/image_list.txt
+# Prepared data is kept locally and not pushed by default
+data/prepared/

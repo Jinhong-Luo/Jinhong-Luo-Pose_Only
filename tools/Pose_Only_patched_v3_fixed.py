@@ -26,8 +26,34 @@ from scipy.sparse import coo_matrix, identity
 from scipy.sparse.linalg import eigsh, lobpcg, cg, LinearOperator, lsmr
 from scipy.sparse.linalg._eigen.arpack.arpack import ArpackNoConvergence
 
+from degeneracy_utils import dump_json, safe_ratio, summarize_array
+from quality_utils import (
+    compute_qtrack,
+    infer_qtrack_config,
+    load_quality_config,
+    logistic_like_ratio,
+    make_quality_config_record,
+    resolve_quality_section,
+    save_quality_config_record,
+)
+from calib_utils import read_custom_Ks
 
 # ----------------- geometry helpers -----------------
+
+
+def make_pa_reason(
+    code: str,
+    detail: Optional[str] = None,
+    *,
+    stage: str = "pa",
+) -> Dict[str, str]:
+    reason = code if not detail else f"{code}:{detail}"
+    return {
+        "failure_stage": stage,
+        "reason_code": code,
+        "reason_detail": detail or "",
+        "reason": reason,
+    }
 
 def skew(v: np.ndarray) -> np.ndarray:
     x, y, z = v.reshape(-1).tolist()
@@ -57,6 +83,10 @@ def to_homo_norm_batch(xy_px: np.ndarray, K: np.ndarray) -> np.ndarray:
     X = (Kinv @ pts_h.T).T
     X /= np.maximum(X[:, 2:3], 1e-12)
     return X
+
+
+def to_homo_norm_batch_per_frame(xy_px: np.ndarray, Ks: np.ndarray, k_idx: int) -> np.ndarray:
+    return to_homo_norm_batch(xy_px, Ks[int(k_idx)])
 
 
 def compute_u(Ri, Rj, Xi, Xj) -> float:
@@ -136,24 +166,106 @@ def choose_base_pair(
 
 # ----------------- load tracks -----------------
 
-def build_tracks_obs(track_npz_dir: str, K: np.ndarray, max_frames: Optional[int] = None):
-    npz_files = sorted(glob.glob(os.path.join(track_npz_dir, "*.npz")))
+def build_tracks_obs(
+    track_npz_dir: str,
+    K: Optional[np.ndarray] = None,
+    Ks: Optional[np.ndarray] = None,
+    image_K_idx: Optional[np.ndarray] = None,
+    max_frames: Optional[int] = None,
+):
+    npz_files_all = sorted(glob.glob(os.path.join(track_npz_dir, "*.npz")))
+    npz_files = []
+    for p in npz_files_all:
+        name = os.path.splitext(os.path.basename(p))[0]
+        if name.isdigit():
+            npz_files.append(p)
     if not npz_files:
         raise FileNotFoundError(track_npz_dir)
     if max_frames is not None:
         npz_files = npz_files[:max_frames]
 
+    if Ks is not None:
+        if image_K_idx is None:
+            raise ValueError("build_tracks_obs: Ks requires image_K_idx")
+        if image_K_idx.shape[0] < len(npz_files):
+            raise ValueError(
+                f"build_tracks_obs: image_K_idx has {image_K_idx.shape[0]} entries, "
+                f"but needs at least {len(npz_files)}"
+            )
+        image_K_idx = image_K_idx[:len(npz_files)]
+    elif K is None:
+        raise ValueError("build_tracks_obs requires either K or Ks+image_K_idx")
+
     tracks: Dict[int, List[Tuple[int, np.ndarray]]] = defaultdict(list)
     for fidx, p in tqdm(list(enumerate(npz_files)), desc="Load tracks npz"):
         d = np.load(p)
+        if "track_ids" not in d.files or "xy" not in d.files:
+            continue
         ids = d["track_ids"].astype(np.int64)
         xy = d["xy"].astype(np.float64)
         if len(ids) == 0:
             continue
-        Xn = to_homo_norm_batch(xy, K)
+        if Ks is not None:
+            Xn = to_homo_norm_batch_per_frame(xy, Ks, int(image_K_idx[fidx]))
+        else:
+            Xn = to_homo_norm_batch(xy, K)
         for k, tid in enumerate(ids):
             tracks[int(tid)].append((fidx, Xn[k]))
     return dict(tracks), npz_files
+
+
+def load_track_quality_prior(track_npz_dir: str) -> Dict[int, Dict[str, float]]:
+    path = os.path.join(track_npz_dir, "track_quality_summary.npz")
+    if not os.path.exists(path):
+        return {}
+    d = np.load(path)
+    track_ids = d["track_ids"].astype(np.int64)
+    track_len = d["track_len"].astype(np.float64)
+    pair_q_mean = d["pair_q_mean"].astype(np.float64)
+    pair_q_min = d["pair_q_min"].astype(np.float64)
+    pair_q_count = d["pair_q_count"].astype(np.float64) if "pair_q_count" in d.files else np.zeros_like(track_len)
+    prior = {}
+    for k, tid in enumerate(track_ids.tolist()):
+        prior[int(tid)] = {
+            "track_len": float(track_len[k]),
+            "pair_q_mean": float(pair_q_mean[k]),
+            "pair_q_min": float(pair_q_min[k]),
+            "pair_q_count": float(pair_q_count[k]),
+        }
+    return prior
+
+
+def load_pair_quality_lookup(track_npz_dir: str) -> Dict[Tuple[int, int], float]:
+    path = os.path.join(track_npz_dir, "pair_quality_edges.npz")
+    if not os.path.exists(path):
+        return {}
+    d = np.load(path)
+    ii = d["i"].astype(np.int64)
+    jj = d["j"].astype(np.int64)
+    qq = d["q_pair"].astype(np.float64)
+    lookup: Dict[Tuple[int, int], float] = {}
+    for i, j, q in zip(ii.tolist(), jj.tolist(), qq.tolist()):
+        lookup[(int(i), int(j))] = float(q)
+        lookup[(int(j), int(i))] = float(q)
+    return lookup
+
+
+def select_top_quality_tracks(
+    tracks_obs: Dict[int, List[Tuple[int, np.ndarray]]],
+    track_scores: Dict[int, float],
+    topk: int = 0,
+    threshold: float = 0.0,
+) -> Dict[int, List[Tuple[int, np.ndarray]]]:
+    items = []
+    for tid, obs in tracks_obs.items():
+        q = float(track_scores.get(int(tid), 1.0))
+        if q < threshold:
+            continue
+        items.append((q, int(tid), obs))
+    items.sort(key=lambda x: (-x[0], x[1]))
+    if topk > 0:
+        items = items[:topk]
+    return {tid: obs for _, tid, obs in items}
 
 
 def _stack_rows_from_skew_x(x: np.ndarray) -> np.ndarray:
@@ -257,6 +369,7 @@ def compute_poseonly_reprojection_stats(
     t_all: np.ndarray,
     min_track_len: int = 3,
     point_rms: float = 5e-3,
+    track_weights: Optional[Dict[int, float]] = None,
 ) -> Tuple[np.ndarray, Dict[int, np.ndarray]]:
     pts3d = estimate_track_points(
         tracks_obs,
@@ -273,6 +386,9 @@ def compute_poseonly_reprojection_stats(
         r = compute_track_reprojection_residuals(obs, Xw, R_abs, t_all)
         if r is None or not np.isfinite(r).all():
             continue
+        if track_weights is not None:
+            w = max(float(track_weights.get(int(tid), 1.0)), 1e-6)
+            r = np.sqrt(w) * r
         residual_blocks.append(r)
         pts_kept[int(tid)] = Xw
 
@@ -335,6 +451,7 @@ def make_fixed_points_residual_fn(
     ref_idx: int = 0,
     refine_rotations: bool = True,
     refine_translations: bool = True,
+    track_weights: Optional[Dict[int, float]] = None,
 ) -> callable:
     tids = [int(tid) for tid in pts3d.keys()]
 
@@ -353,6 +470,9 @@ def make_fixed_points_residual_fn(
             if r is None:
                 # Keep dimension fixed while heavily penalizing invalid poses.
                 r = np.full((2 * len(tracks_obs[tid]),), 1e2, dtype=np.float64)
+            if track_weights is not None:
+                w = max(float(track_weights.get(int(tid), 1.0)), 1e-6)
+                r = np.sqrt(w) * r
             residual_blocks.append(r)
         return np.concatenate(residual_blocks, axis=0) if residual_blocks else np.zeros((0,), dtype=np.float64)
 
@@ -461,7 +581,14 @@ def run_pose_adjustment(
     pa_max_nfev: int = 50,
     pa_loss: str = "soft_l1",
     pa_f_scale: float = 1e-3,
-) -> Tuple[np.ndarray, Dict[int, np.ndarray]]:
+    track_weights: Optional[Dict[int, float]] = None,
+    enable_degeneracy_guard: bool = False,
+    pa_skip_on_degenerate: bool = False,
+    pa_min_points: int = 30,
+    pa_max_init_rmse: float = 5e-2,
+    pa_max_step_t: float = 0.0,
+    pa_max_step_r_deg: float = 0.0,
+) -> Tuple[np.ndarray, np.ndarray, Dict[int, np.ndarray], Dict[str, object]]:
     """
     Conservative paper-style PA:
       1. analytically reconstruct 3D points from current poses
@@ -471,18 +598,45 @@ def run_pose_adjustment(
     """
     R_curr = np.asarray(R_abs, np.float64).copy()
     t_curr = np.asarray(t_init, np.float64).copy()
+    stats: Dict[str, object] = {
+        "status": "not_run",
+        "iterations": [],
+        "track_count": int(len(tracks_obs)),
+        "failure_stage": None,
+        "reason_code": None,
+        "reason_detail": "",
+        "reason": None,
+    }
     residual0, pts3d = compute_poseonly_reprojection_stats(
         tracks_obs,
         R_curr,
         t_curr,
         min_track_len=min_track_len,
         point_rms=pa_point_rms,
+        track_weights=track_weights,
     )
     if residual0.size == 0 or not pts3d:
         raise RuntimeError("PA initialization produced no valid reprojection residuals.")
 
     cost_curr = 0.5 * float(np.dot(residual0, residual0))
     rmse_curr = float(np.sqrt(np.mean(residual0 * residual0)))
+    stats.update({
+        "status": "running",
+        "triangulated_points": int(len(pts3d)),
+        "valid_residual_count": int(residual0.size),
+        "init_rmse": float(rmse_curr),
+    })
+    if enable_degeneracy_guard and pa_skip_on_degenerate:
+        if len(pts3d) < pa_min_points:
+            stats["status"] = "skipped"
+            stats.update(make_pa_reason("too_few_points", f"triangulated_points<{pa_min_points}"))
+            print(f"[PA] skipped: {stats['reason']}")
+            return R_curr, t_curr, pts3d, stats
+        if rmse_curr > pa_max_init_rmse:
+            stats["status"] = "skipped"
+            stats.update(make_pa_reason("high_init_rmse", f"init_rmse>{pa_max_init_rmse:.3e}"))
+            print(f"[PA] skipped: {stats['reason']}")
+            return R_curr, t_curr, pts3d, stats
     print(f"[PA] init points={len(pts3d)}, residual_rmse={rmse_curr:.3e}, cost={cost_curr:.6e}")
 
     for it in range(max(1, pa_iters)):
@@ -492,9 +646,12 @@ def run_pose_adjustment(
             t_curr,
             min_track_len=min_track_len,
             point_rms=pa_point_rms,
+            track_weights=track_weights,
         )
         if residual_fixed.size == 0 or not pts_fixed:
             print(f"[PA {it+1}/{pa_iters}] skipped: no valid reconstructed points.")
+            stats["status"] = "rejected"
+            stats.update(make_pa_reason("too_few_points", "no_valid_reconstructed_points"))
             break
 
         x0 = pack_pose_params(
@@ -516,6 +673,7 @@ def run_pose_adjustment(
             ref_idx=ref_idx,
             refine_rotations=pa_refine_rotations,
             refine_translations=pa_refine_translations,
+            track_weights=track_weights,
         )
         result = least_squares(
             residual_fn,
@@ -540,9 +698,12 @@ def run_pose_adjustment(
             t_next,
             min_track_len=min_track_len,
             point_rms=pa_point_rms,
+            track_weights=track_weights,
         )
         if residual_next.size == 0 or not pts_next:
             print(f"[PA {it+1}/{pa_iters}] rejected: candidate produced no valid reprojection residuals.")
+            stats["status"] = "rejected"
+            stats.update(make_pa_reason("no_valid_residuals", "candidate_no_valid_residuals"))
             break
 
         cost_next = 0.5 * float(np.dot(residual_next, residual_next))
@@ -560,17 +721,45 @@ def run_pose_adjustment(
             f"cost {cost_curr:.6e} -> {cost_next:.6e}, "
             f"step_t_max={np.max(step_t):.3e}, step_r_max_deg={np.degrees(np.max(dR)):.3e}"
         )
+        stats["iterations"].append({
+            "iter": int(it + 1),
+            "fixed_points": int(len(pts_fixed)),
+            "candidate_points": int(len(pts_next)),
+            "rmse_before": float(rmse_curr),
+            "rmse_after": float(rmse_next),
+            "cost_before": float(cost_curr),
+            "cost_after": float(cost_next),
+            "step_t_max": float(np.max(step_t)),
+            "step_r_max_deg": float(np.degrees(np.max(dR))),
+        })
+        if pa_max_step_t > 0 and float(np.max(step_t)) > pa_max_step_t:
+            print(f"[PA {it+1}/{pa_iters}] rejected (step_t_max>{pa_max_step_t:.3e})")
+            stats["status"] = "rejected"
+            stats.update(make_pa_reason("step_t_too_large", f"step_t_max>{pa_max_step_t:.3e}"))
+            break
+        if pa_max_step_r_deg > 0 and float(np.degrees(np.max(dR))) > pa_max_step_r_deg:
+            print(f"[PA {it+1}/{pa_iters}] rejected (step_r_max_deg>{pa_max_step_r_deg:.3e})")
+            stats["status"] = "rejected"
+            stats.update(make_pa_reason("step_r_too_large", f"step_r_max_deg>{pa_max_step_r_deg:.3e}"))
+            break
         if cost_next + 1e-12 < cost_curr:
             R_curr, t_curr = R_next, t_next
             pts3d = pts_next
             cost_curr = cost_next
             rmse_curr = rmse_next
             print(f"[PA {it+1}/{pa_iters}] accepted")
+            stats["status"] = "accepted"
         else:
             print(f"[PA {it+1}/{pa_iters}] rejected (no reprojection improvement)")
+            stats["status"] = "rejected"
+            stats.update(make_pa_reason("no_reprojection_improvement"))
             break
 
-    return R_curr, t_curr, pts3d
+    if stats.get("status") == "running":
+        stats["status"] = "finished_without_update"
+    stats["final_points"] = int(len(pts3d))
+    stats["final_rmse"] = float(rmse_curr)
+    return R_curr, t_curr, pts3d, stats
 
 
 def _solve_min_eigvector(A: "scipy.sparse.spmatrix", solver: str = "auto") -> np.ndarray:
@@ -647,6 +836,69 @@ def _solve_min_eigvector(A: "scipy.sparse.spmatrix", solver: str = "auto") -> np
     raise RuntimeError("CG failed")
 
 
+def infer_ligt_qtrack_config(
+    items,
+    R_abs: np.ndarray,
+    track_quality_prior: Optional[Dict[int, Dict[str, float]]] = None,
+    pair_quality_lookup: Optional[Dict[Tuple[int, int], float]] = None,
+    min_track_len: int = 3,
+    base_pair_candidates: int = 80,
+    base_pair_full_search_len: int = 50,
+    base_pair_min_gap: int = 0,
+    base_pair_max_gap: int = 0,
+    u_min: float = 1e-3,
+    g_min: float = 1e-3,
+    base_config: Optional[Dict] = None,
+) -> Dict:
+    rng = np.random.default_rng(0)
+    track_len_vals = []
+    base_u_vals = []
+    g_vals = []
+
+    for tid, obs in items:
+        if len(obs) < min_track_len:
+            continue
+        obs = sorted(obs, key=lambda x: x[0])
+        frames = [int(f) for f, _ in obs]
+        Xs = [np.asarray(X, np.float64).reshape(3,) for _, X in obs]
+        best, best_u = choose_base_pair(
+            frames,
+            Xs,
+            R_abs,
+            max_candidates=base_pair_candidates,
+            full_search_len=base_pair_full_search_len,
+            min_gap=base_pair_min_gap,
+            max_gap=base_pair_max_gap,
+            rng=rng,
+        )
+        if best is None or best_u < u_min:
+            continue
+        p_idx, q_idx = best
+        f_xi, f_h = frames[p_idx], frames[q_idx]
+        X_xi = Xs[p_idx]
+        local_g = []
+        for k, f_i in enumerate(frames):
+            if f_i == f_xi or f_i == f_h:
+                continue
+            X_i = Xs[k]
+            R_xi_i = R_abs[f_i] @ R_abs[f_xi].T
+            g = float(np.linalg.norm(skew(X_i) @ (R_xi_i @ X_xi)))
+            if g >= g_min:
+                local_g.append(g)
+        if not local_g:
+            continue
+        track_len_vals.append(len(obs))
+        base_u_vals.append(float(best_u))
+        g_vals.append(float(np.median(local_g)))
+
+    return infer_qtrack_config(
+        track_len=track_len_vals,
+        base_u=base_u_vals,
+        g_stat=g_vals,
+        base_config=base_config,
+    )
+
+
 def solve_ligt_sparse(
     tracks_obs: Dict[int, List[Tuple[int, np.ndarray]]],
     R_abs: np.ndarray,
@@ -666,7 +918,15 @@ def solve_ligt_sparse(
     irls_iters: int = 0,
     irls_huber_k: float = 1.5,
     gt_t_all: Optional[np.ndarray] = None,
-) -> np.ndarray:
+    track_quality_prior: Optional[Dict[int, Dict[str, float]]] = None,
+    pair_quality_lookup: Optional[Dict[Tuple[int, int], float]] = None,
+    enable_quality_weighting: bool = False,
+    qtrack_mode: str = "weighted_sum",
+    qtrack_threshold: float = 0.0,
+    ligt_use_qtrack_weight: bool = False,
+    qtrack_config: Optional[Dict] = None,
+    auto_quality_refs: bool = False,
+) -> Tuple[np.ndarray, Dict[str, object], Dict[int, float]]:
     """Build LiGT and solve translations.
 
     Notes:
@@ -686,6 +946,22 @@ def solve_ligt_sparse(
     items = list(tracks_obs.items())
     rng.shuffle(items)
     items = items[: min(len(items), max_tracks)]
+    qtrack_cfg = dict(qtrack_config or {})
+    if auto_quality_refs:
+        qtrack_cfg = infer_ligt_qtrack_config(
+            items,
+            R_abs,
+            track_quality_prior=track_quality_prior,
+            pair_quality_lookup=pair_quality_lookup,
+            min_track_len=min_track_len,
+            base_pair_candidates=base_pair_candidates,
+            base_pair_full_search_len=base_pair_full_search_len,
+            base_pair_min_gap=base_pair_min_gap,
+            base_pair_max_gap=base_pair_max_gap,
+            u_min=u_min,
+            g_min=g_min,
+            base_config=qtrack_cfg,
+        )
 
     rows: List[int] = []
     cols: List[int] = []
@@ -702,9 +978,28 @@ def solve_ligt_sparse(
 
     u_kept: List[float] = []
     g_kept: List[float] = []
+    qtrack_kept: List[float] = []
+    base_pair_q_kept: List[float] = []
+    eq_quality_kept: List[float] = []
+    track_scores: Dict[int, float] = {}
+    diagnostics: Dict[str, object] = {
+        "tracks_total_input": int(len(tracks_obs)),
+        "tracks_sampled": int(len(items)),
+        "tracks_too_short": 0,
+        "tracks_no_base_pair": 0,
+        "tracks_rejected_u": 0,
+        "tracks_rejected_qtrack": 0,
+        "tracks_kept": 0,
+        "equations_considered": 0,
+        "equations_rejected_g": 0,
+        "equations_kept": 0,
+        "qtrack_mode": qtrack_mode,
+        "qtrack_config": qtrack_cfg,
+    }
 
-    for _, obs in tqdm(items, desc="Build LiGT"):
+    for tid, obs in tqdm(items, desc="Build LiGT"):
         if len(obs) < min_track_len:
+            diagnostics["tracks_too_short"] += 1
             continue
         obs = sorted(obs, key=lambda x: x[0])
         frames = [int(f) for f, _ in obs]
@@ -721,6 +1016,7 @@ def solve_ligt_sparse(
             rng=rng,
         )
         if best is None or best_u < u_min:
+            diagnostics["tracks_no_base_pair"] += 1
             continue
 
         p_idx, q_idx = best
@@ -728,11 +1024,14 @@ def solve_ligt_sparse(
         X_xi, X_h = Xs[p_idx], Xs[q_idx]
         u_xh = compute_u(R_abs[f_xi], R_abs[f_h], X_xi, X_h)
         if u_xh < u_min:
+            diagnostics["tracks_rejected_u"] += 1
             continue
         u_kept.append(float(u_xh))
 
         aT = compute_aT(R_abs[f_xi], R_abs[f_h], X_xi, X_h)
         aTRh = (aT @ R_abs[f_h]).reshape(1, 3)
+        local_blocks = []
+        local_g = []
 
         for k in range(len(frames)):
             f_i = frames[k]
@@ -745,9 +1044,12 @@ def solve_ligt_sparse(
 
             # paper degeneracy note: if [X_i]_x R_{xi;i} X_xi == 0 => B=C=D=0 (no constraint)
             g = float(np.linalg.norm(skew(X_i) @ v))
+            diagnostics["equations_considered"] += 1
             if g < g_min:
+                diagnostics["equations_rejected_g"] += 1
                 continue
             g_kept.append(g)
+            local_g.append(g)
 
             Btmp = v.reshape(3, 1) @ aTRh.reshape(1, 3)
             B = skew(X_i) @ Btmp
@@ -765,18 +1067,63 @@ def solve_ligt_sparse(
                     w = 1.0 / denom
                     B *= w; C *= w; D *= w
 
-            r0 = 3 * n_eq
             cb_h, cb_i, cb_xi = col_base(f_h), col_base(f_i), col_base(f_xi)
-            if cb_h is not None:
-                add_block(r0, cb_h, B)
-            if cb_i is not None:
-                add_block(r0, cb_i, C)
-            if cb_xi is not None:
-                add_block(r0, cb_xi, D)
+            local_blocks.append((cb_h, cb_i, cb_xi, B, C, D, float(g)))
+            if n_eq + len(local_blocks) >= max_equations:
+                break
+        if n_eq >= max_equations:
+            break
+        if len(local_blocks) == 0:
+            continue
 
+        prior = track_quality_prior.get(int(tid), {}) if track_quality_prior else {}
+        pair_q_mean = float(prior.get("pair_q_mean", 1.0))
+        pair_q_min = float(prior.get("pair_q_min", pair_q_mean))
+        base_pair_q = float(pair_quality_lookup.get((int(f_xi), int(f_h)), pair_q_mean)) if pair_quality_lookup else pair_q_mean
+        pair_q_mean = 0.5 * (pair_q_mean + base_pair_q)
+        pair_q_min = min(pair_q_min, base_pair_q)
+        g_stat = float(np.median(local_g)) if local_g else 0.0
+        q_track = compute_qtrack(
+            track_len=len(obs),
+            pair_q_mean=pair_q_mean,
+            pair_q_min=pair_q_min,
+            base_u=u_xh,
+            g_stat=g_stat,
+            mode=qtrack_mode,
+            config=qtrack_cfg,
+        )
+        track_scores[int(tid)] = float(q_track)
+        # Keep threshold support for ablations, but default workflow should rely on soft weighting.
+        if enable_quality_weighting and qtrack_threshold > 0.0 and q_track < qtrack_threshold:
+            diagnostics["tracks_rejected_qtrack"] += 1
+            continue
+        qtrack_kept.append(float(q_track))
+        base_pair_q_kept.append(float(base_pair_q))
+
+        track_prior = max(float(q_track), 1e-6) if (enable_quality_weighting and ligt_use_qtrack_weight) else 1.0
+        pair_prior = max(float(base_pair_q), 1e-6)
+        g_ref = max(float(qtrack_cfg.get("g_ref", 1e-6)), 1e-6)
+
+        for cb_h, cb_i, cb_xi, B, C, D, g_value in local_blocks:
+            eq_weight = 1.0
+            if enable_quality_weighting:
+                eq_g_quality = logistic_like_ratio(float(g_value), g_ref)
+                eq_quality = max(pair_prior * eq_g_quality, 1e-6)
+                eq_quality_kept.append(float(eq_quality))
+                eq_weight = eq_quality * track_prior
+            eq_scale = np.sqrt(eq_weight)
+            r0 = 3 * n_eq
+            if cb_h is not None:
+                add_block(r0, cb_h, eq_scale * B)
+            if cb_i is not None:
+                add_block(r0, cb_i, eq_scale * C)
+            if cb_xi is not None:
+                add_block(r0, cb_xi, eq_scale * D)
             n_eq += 1
+            diagnostics["equations_kept"] += 1
             if n_eq >= max_equations:
                 break
+        diagnostics["tracks_kept"] += 1
         if n_eq >= max_equations:
             break
 
@@ -789,6 +1136,12 @@ def solve_ligt_sparse(
     if g_kept:
         gq = np.quantile(g_kept, [0.1, 0.5, 0.9])
         print(f"[LiGT] g kept quantiles: p10={gq[0]:.3e}, p50={gq[1]:.3e}, p90={gq[2]:.3e} (n={len(g_kept)})")
+    if qtrack_kept:
+        qq = np.quantile(qtrack_kept, [0.1, 0.5, 0.9])
+        print(f"[LiGT] q_track kept quantiles: p10={qq[0]:.3f}, p50={qq[1]:.3f}, p90={qq[2]:.3f} (n={len(qtrack_kept)})")
+    if eq_quality_kept:
+        eq_q = np.quantile(eq_quality_kept, [0.1, 0.5, 0.9])
+        print(f"[LiGT] equation quality quantiles: p10={eq_q[0]:.3f}, p50={eq_q[1]:.3f}, p90={eq_q[2]:.3f} (n={len(eq_quality_kept)})")
 
     n_rows = 3 * n_eq
     n_cols = 3 * (N - 1)
@@ -914,7 +1267,18 @@ def solve_ligt_sparse(
     if s > 1e-9:
         t_all = t_all / s
 
-    return t_all
+    diagnostics.update({
+        "u_stats": summarize_array(u_kept),
+        "g_stats": summarize_array(g_kept),
+        "qtrack_stats": summarize_array(qtrack_kept),
+        "base_pair_q_stats": summarize_array(base_pair_q_kept),
+        "equation_quality_stats": summarize_array(eq_quality_kept),
+        "g_reject_ratio": safe_ratio(diagnostics["equations_rejected_g"], max(diagnostics["equations_considered"], 1)),
+        "qtrack_reject_ratio": safe_ratio(diagnostics["tracks_rejected_qtrack"], max(diagnostics["tracks_sampled"], 1)),
+        "kept_track_ratio": safe_ratio(diagnostics["tracks_kept"], max(diagnostics["tracks_sampled"], 1)),
+    })
+
+    return t_all, diagnostics, track_scores
 
 
 def save_poses_w2c(path: str, R_abs: np.ndarray, t_world: np.ndarray):
@@ -941,6 +1305,8 @@ def main():
     ap.add_argument("--calib_txt", default=None)
     ap.add_argument("--kitti_cam", default="P0")
     ap.add_argument("--K_npy", default=None)
+    ap.add_argument("--Ks_npy", default=None)
+    ap.add_argument("--image_K_idx_npy", default=None)
 
     ap.add_argument("--ref_idx", type=int, default=0)
     ap.add_argument("--max_frames", type=int, default=None)
@@ -965,6 +1331,22 @@ def main():
     ap.add_argument("--sign_vote_tracks", type=int, default=2000)
     ap.add_argument("--solver", choices=["auto", "eigsh", "lobpcg"], default="auto")
     ap.add_argument("--eq_norm", choices=["fro", "u2", "none"], default="fro")
+    ap.add_argument("--enable_quality_weighting", action="store_true")
+    ap.add_argument("--qtrack_mode", choices=["weighted_sum", "product", "log_additive"], default="weighted_sum")
+    ap.add_argument("--qtrack_threshold", type=float, default=0.0,
+                    help="optional hard gate on q_track; default 0 disables filtering and relies on soft weighting instead")
+    ap.add_argument("--ligt_use_qtrack_weight", action="store_true")
+    ap.add_argument("--quality_config", type=str, default=None, help="optional JSON config with a qtrack section")
+    ap.add_argument("--auto_quality_refs", action="store_true", help="fit q_track reference scales from current LiGT statistics")
+    ap.add_argument("--pa_use_qtrack", action="store_true")
+    ap.add_argument("--pa_topk_tracks", type=int, default=0)
+    ap.add_argument("--pa_high_quality_threshold", type=float, default=0.5)
+    ap.add_argument("--enable_degeneracy_guard", action="store_true")
+    ap.add_argument("--pa_skip_on_degenerate", action="store_true")
+    ap.add_argument("--pa_min_points", type=int, default=30)
+    ap.add_argument("--pa_max_init_rmse", type=float, default=5e-2)
+    ap.add_argument("--dump_quality_stats", action="store_true")
+    ap.add_argument("--dump_degeneracy_stats", action="store_true")
     ap.add_argument("--gt_pose_txt", type=str, default=None, help="KITTI GT poses txt (c2w) for diagnostic")
     ap.add_argument("--run_pa", action="store_true", help="Run optional PA refinement after LiGT.")
     ap.add_argument("--pa_iters", type=int, default=3, help="Number of alternating PA refinement rounds.")
@@ -974,12 +1356,19 @@ def main():
     ap.add_argument("--pa_max_nfev", type=int, default=50, help="Max function evaluations per PA outer iteration.")
     ap.add_argument("--pa_loss", choices=["linear", "soft_l1", "huber", "cauchy", "arctan"], default="soft_l1")
     ap.add_argument("--pa_f_scale", type=float, default=1e-3, help="Robust loss scale used by scipy.least_squares.")
+    ap.add_argument("--pa_max_step_t", type=float, default=0.0, help="Reject PA update when max translation step exceeds this value. 0 disables.")
+    ap.add_argument("--pa_max_step_r_deg", type=float, default=0.0, help="Reject PA update when max rotation step exceeds this value in degrees. 0 disables.")
 
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
     # K
-    if args.K_npy:
+    Ks = None
+    image_K_idx = None
+    if args.Ks_npy:
+        Ks, image_K_idx = read_custom_Ks(args.Ks_npy, args.image_K_idx_npy)
+        K = None
+    elif args.K_npy:
         K = np.load(args.K_npy).astype(np.float64)
     else:
         if args.dataset == "kitti":
@@ -987,13 +1376,23 @@ def main():
                 raise ValueError("KITTI needs --calib_txt (or provide --K_npy)")
             K = load_kitti_K_from_calib(args.calib_txt, cam=args.kitti_cam)
         else:
-            raise ValueError("custom dataset needs --K_npy")
+            raise ValueError("custom dataset needs --K_npy or --Ks_npy + --image_K_idx_npy")
     print("[K]\n", K)
+    if Ks is not None:
+        print(f"[Ks] count={Ks.shape[0]}")
 
     R_abs = np.load(args.r_abs_npy).astype(np.float64)
     assert R_abs.ndim == 3 and R_abs.shape[1:] == (3, 3)
 
-    tracks_obs, npz_files = build_tracks_obs(args.track_npz_dir, K, max_frames=args.max_frames)
+    tracks_obs, npz_files = build_tracks_obs(
+        args.track_npz_dir,
+        K=K,
+        Ks=Ks,
+        image_K_idx=image_K_idx,
+        max_frames=args.max_frames,
+    )
+    track_quality_prior = load_track_quality_prior(args.track_npz_dir)
+    pair_quality_lookup = load_pair_quality_lookup(args.track_npz_dir)
     T = min(len(npz_files), R_abs.shape[0])
     R_abs = R_abs[:T]
 
@@ -1004,6 +1403,9 @@ def main():
             tracks_pruned[tid] = obs2
 
     gt_t_all = None
+    quality_payload = load_quality_config(args.quality_config)
+    qtrack_config_resolved = resolve_quality_section(quality_payload, "qtrack", {})
+    qtrack_config = dict(qtrack_config_resolved)
     if args.gt_pose_txt:
         Ts = []
         with open(args.gt_pose_txt, 'r') as f:
@@ -1016,7 +1418,7 @@ def main():
         gt_t_all = Ts[:T, :3, 3].copy()  # camera centers in world (c2w)
         print('[GT] loaded', args.gt_pose_txt, 't shape=', gt_t_all.shape)
 
-    t_ligt = solve_ligt_sparse(
+    t_ligt, ligt_stats, track_scores = solve_ligt_sparse(
         tracks_pruned,
         R_abs,
         ref_idx=args.ref_idx,
@@ -1035,18 +1437,97 @@ def main():
         irls_iters=args.irls_iters,
         irls_huber_k=args.irls_huber_k,
         gt_t_all=gt_t_all,
+        track_quality_prior=track_quality_prior,
+        pair_quality_lookup=pair_quality_lookup,
+        enable_quality_weighting=args.enable_quality_weighting,
+        qtrack_mode=args.qtrack_mode,
+        qtrack_threshold=args.qtrack_threshold,
+        ligt_use_qtrack_weight=args.ligt_use_qtrack_weight,
+        qtrack_config=qtrack_config,
+        auto_quality_refs=args.auto_quality_refs,
+    )
+    qtrack_effective = dict(ligt_stats.get("qtrack_config", qtrack_config))
+    quality_record = make_quality_config_record(
+        stage="pose_only_ligt",
+        section="qtrack",
+        raw_payload=quality_payload,
+        resolved_section=qtrack_config_resolved,
+        effective_section=qtrack_effective,
+        mode=args.qtrack_mode,
+        auto_quality_refs=args.auto_quality_refs,
+        quality_config_path=args.quality_config,
+        extra={
+            "output_path": os.path.join(args.out_dir, "quality_config_used.json"),
+            "decision_parameters": {
+                "qtrack_threshold": float(args.qtrack_threshold),
+                "u_min": float(args.u_min),
+                "g_min": float(args.g_min),
+                "pa_max_init_rmse": float(args.pa_max_init_rmse),
+            },
+            "weighting_flags": {
+                "enable_quality_weighting": bool(args.enable_quality_weighting),
+                "ligt_use_qtrack_weight": bool(args.ligt_use_qtrack_weight),
+                "pa_use_qtrack": bool(args.pa_use_qtrack),
+            },
+        },
     )
 
     np.save(os.path.join(args.out_dir, "t_all_ligt.npy"), t_ligt)
     np.save(os.path.join(args.out_dir, "R_abs_used.npy"), R_abs)
     save_poses_w2c(os.path.join(args.out_dir, "poses_w2c_ligt.txt"), R_abs, t_ligt)
     save_poses_c2w(os.path.join(args.out_dir, "poses_c2w_ligt.txt"), R_abs, t_ligt)
+    save_quality_config_record(os.path.join(args.out_dir, "quality_config_used.json"), quality_record)
+    if args.dump_quality_stats:
+        tids = np.array(sorted(track_scores.keys()), dtype=np.int64)
+        qs = np.array([track_scores[int(t)] for t in tids], dtype=np.float64)
+        np.savez_compressed(
+            os.path.join(args.out_dir, "track_quality_scores.npz"),
+            track_ids=tids,
+            q_track=qs.astype(np.float32),
+        )
+        dump_json(
+            os.path.join(args.out_dir, "quality_stats.json"),
+            {
+                "track_quality": summarize_array(qs),
+                "track_count": int(len(track_scores)),
+                "qtrack_config": qtrack_effective,
+                "quality_config_used": quality_record,
+                "config": vars(args),
+            },
+        )
+    if args.dump_degeneracy_stats:
+        dump_json(os.path.join(args.out_dir, "ligt_degeneracy_stats.json"), ligt_stats)
 
     t_all = t_ligt
+    pa_stats = {
+        "status": "not_requested",
+        "failure_stage": None,
+        "reason_code": None,
+        "reason_detail": "",
+        "reason": None,
+    }
     if args.run_pa:
         try:
-            R_pa, t_all, pts3d = run_pose_adjustment(
-                tracks_pruned,
+            pa_tracks = tracks_pruned
+            pa_track_weights = None
+            if args.pa_use_qtrack:
+                pa_tracks = select_top_quality_tracks(
+                    tracks_pruned,
+                    track_scores,
+                    topk=args.pa_topk_tracks,
+                    threshold=args.qtrack_threshold,
+                )
+                pa_track_weights = {int(tid): float(track_scores.get(int(tid), 1.0)) for tid in pa_tracks.keys()}
+                hq_ratio = safe_ratio(
+                    sum(1 for q in pa_track_weights.values() if q >= args.pa_high_quality_threshold),
+                    max(len(pa_track_weights), 1),
+                )
+                print(f"[PA] selected_tracks={len(pa_tracks)}, high_quality_ratio={hq_ratio:.3f}")
+                if args.enable_degeneracy_guard and args.pa_skip_on_degenerate and len(pa_tracks) == 0:
+                    raise RuntimeError("PA skipped: no tracks remained after q_track filtering.")
+
+            R_pa, t_all, pts3d, pa_stats = run_pose_adjustment(
+                pa_tracks,
                 R_abs,
                 t_ligt,
                 ref_idx=args.ref_idx,
@@ -1058,14 +1539,28 @@ def main():
                 pa_max_nfev=args.pa_max_nfev,
                 pa_loss=args.pa_loss,
                 pa_f_scale=args.pa_f_scale,
+                track_weights=pa_track_weights,
+                enable_degeneracy_guard=args.enable_degeneracy_guard,
+                pa_skip_on_degenerate=args.pa_skip_on_degenerate,
+                pa_min_points=args.pa_min_points,
+                pa_max_init_rmse=args.pa_max_init_rmse,
+                pa_max_step_t=args.pa_max_step_t,
+                pa_max_step_r_deg=args.pa_max_step_r_deg,
             )
             R_abs = R_pa
             np.save(os.path.join(args.out_dir, "t_all_pa.npy"), t_all)
-            np.save(os.path.join(args.out_dir, "pa_points.npy"), np.stack(list(pts3d.values()), axis=0).astype(np.float64))
+            if pts3d:
+                np.save(os.path.join(args.out_dir, "pa_points.npy"), np.stack(list(pts3d.values()), axis=0).astype(np.float64))
             save_poses_w2c(os.path.join(args.out_dir, "poses_w2c_pa.txt"), R_abs, t_all)
             save_poses_c2w(os.path.join(args.out_dir, "poses_c2w_pa.txt"), R_abs, t_all)
         except RuntimeError as e:
             print(f"[PA] skipped: {e}")
+            pa_stats = {
+                "status": "skipped",
+                **make_pa_reason("exception", str(e)),
+            }
+        if args.dump_degeneracy_stats:
+            dump_json(os.path.join(args.out_dir, "pa_degeneracy_stats.json"), pa_stats)
 
     np.save(os.path.join(args.out_dir, "t_all.npy"), t_all)
     save_poses_w2c(os.path.join(args.out_dir, "poses_w2c.txt"), R_abs, t_all)

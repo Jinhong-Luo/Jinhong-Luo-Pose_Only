@@ -1,0 +1,334 @@
+{
+  "name": "paper_benchmark_manifest_v2",
+  "defaults": {
+    "output_dir": "runs/paper_v2/eval",
+    "gt_unit_to_mm": 1000.0
+  },
+  "default_scene_tags": [
+    "main"
+  ],
+  "default_experiment_tags": [
+    "main"
+  ],
+  "datasets": [
+    {
+      "name": "strecha",
+      "scenes": [
+        {
+          "scene": "fountain-P11",
+          "tags": [
+            "main",
+            "ablation"
+          ],
+          "prepared_scene_dir": "data/prepared/strecha/fountain-P11",
+          "scene_run_root_candidates": [
+            "runs/strecha/fountain-P11"
+          ]
+        },
+        {
+          "scene": "entry-P10",
+          "tags": [
+            "main",
+            "ablation"
+          ],
+          "prepared_scene_dir": "data/prepared/strecha/entry-P10",
+          "scene_run_root_candidates": [
+            "runs/strecha/entry-P10"
+          ]
+        },
+        {
+          "scene": "Herz-Jesus-P8",
+          "tags": [
+            "main",
+            "ablation"
+          ],
+          "prepared_scene_dir": "data/prepared/strecha/Herz-Jesus-P8",
+          "scene_run_root_candidates": [
+            "runs/strecha/Herz-Jesus-P8"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ETH3D",
+      "scenes": [
+        {
+          "scene": "courtyard",
+          "tags": [
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/ETH3D/courtyard",
+          "scene_run_root_candidates": [
+            "runs/ETH3D_repaired/courtyard"
+          ]
+        },
+        {
+          "scene": "delivery_area",
+          "tags": [
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/ETH3D/delivery_area",
+          "scene_run_root_candidates": [
+            "runs/ETH3D_repaired/delivery_area"
+          ]
+        },
+        {
+          "scene": "office",
+          "tags": [
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/ETH3D/office",
+          "scene_run_root_candidates": [
+            "runs/ETH3D/office"
+          ]
+        },
+        {
+          "scene": "terrace",
+          "tags": [
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/ETH3D/terrace",
+          "scene_run_root_candidates": [
+            "runs/ETH3D_repaired/terrace"
+          ]
+        },
+        {
+          "scene": "electro",
+          "tags": [
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/ETH3D/electro",
+          "scene_run_root_candidates": [
+            "runs/ETH3D/electro"
+          ]
+        }
+      ]
+    }
+  ],
+  "experiment_groups": [
+    {
+      "name": "gt_ligt",
+      "tags": [
+        "main"
+      ],
+      "rotation_source": "GT",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/gt_ligt/{scene_slug}"
+      ]
+    },
+    {
+      "name": "gt_ligt_pa",
+      "tags": [
+        "main"
+      ],
+      "rotation_source": "GT",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/gt_ligt_pa/{scene_slug}"
+      ]
+    },
+    {
+      "name": "rraa_ligt",
+      "tags": [
+        "main"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/rraa_ligt/{scene_slug}"
+      ]
+    },
+    {
+      "name": "rraa_ligt_pa",
+      "tags": [
+        "main"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/rraa_ligt_pa/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_qtrack_weighted_sum",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_qtrack_weighted_sum/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_qtrack_product",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "product",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_qtrack_product/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_qtrack_log_additive",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "log_additive",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_qtrack_log_additive/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_pa_off",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_pa_off/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_pa_on",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_pa_on/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_rraa_quality_off",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": false,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_rraa_quality_off/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_rraa_quality_on",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_rraa_quality_on/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_deg_1e-4",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.0001,
+      "g_min": 0.0001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_deg_1e-4/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_deg_1e-3",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_deg_1e-3/{scene_slug}"
+      ]
+    },
+    {
+      "name": "ablation_deg_1e-2",
+      "tags": [
+        "ablation"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.01,
+      "g_min": 0.01,
+      "run_dir_candidates": [
+        "runs/paper_v2/ablation/ablation_deg_1e-2/{scene_slug}"
+      ]
+    }
+  ]
+}
