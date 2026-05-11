@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import hashlib
 import os
+import glob
 from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -69,6 +70,14 @@ def _feature_cache_path(cache_dir: str, image_path: str, max_kpts: int) -> str:
     return os.path.join(cache_dir, f"{stem}_{digest}.pt")
 
 
+def _feature_cache_fallback_path(cache_dir: str, image_path: str) -> Optional[str]:
+    stem = os.path.splitext(os.path.basename(image_path))[0]
+    candidates = sorted(glob.glob(os.path.join(cache_dir, f"{stem}_*.pt")))
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
 def load_or_extract_feature(
     image_path: str,
     extractor,
@@ -83,8 +92,9 @@ def load_or_extract_feature(
     if cache_dir:
         os.makedirs(cache_dir, exist_ok=True)
         cache_path = _feature_cache_path(cache_dir, image_path, max_kpts)
-        if os.path.exists(cache_path):
-            cached = torch.load(cache_path, map_location="cpu")
+        load_path = cache_path if os.path.exists(cache_path) else _feature_cache_fallback_path(cache_dir, image_path)
+        if load_path and os.path.exists(load_path):
+            cached = torch.load(load_path, map_location="cpu")
             feats_cpu = cached["features"]
             feats = _move_feature_dict(feats_cpu, device)
             kpts = feats_cpu["keypoints"][0].detach().cpu().numpy()

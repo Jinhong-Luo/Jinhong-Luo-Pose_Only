@@ -1,0 +1,69 @@
+{
+  "name": "paper_v2_strecha4_dtu4_dev8",
+  "scenes": [
+    {
+      "dataset": "strecha",
+      "scene_id": "fountain-P11",
+      "scene_key": "strecha_fountain_P11",
+      "prepared_scene_dir": "data/prepared/strecha/fountain-P11",
+      "scene_root": "runs/strecha/fountain-P11",
+      "gt_unit_to_mm": 1000
+    },
+    {
+      "dataset": "strecha",
+      "scene_id": "entry-P10",
+      "scene_key": "strecha_entry_P10",
+      "prepared_scene_dir": "data/prepared/strecha/entry-P10",
+      "scene_root": "runs/strecha/entry-P10",
+      "gt_unit_to_mm": 1000
+    },
+    {
+      "dataset": "strecha",
+      "scene_id": "Herz-Jesus-P8",
+      "scene_key": "strecha_Herz_Jesus_P8",
+      "prepared_scene_dir": "data/prepared/strecha/Herz-Jesus-P8",
+      "scene_root": "runs/strecha/Herz-Jesus-P8",
+      "gt_unit_to_mm": 1000
+    },
+    {
+      "dataset": "strecha",
+      "scene_id": "Castle-P19",
+      "scene_key": "strecha_Castle_P19",
+      "prepared_scene_dir": "data/prepared/strecha/Castle-P19",
+      "scene_root": "runs/strecha/Castle-P19",
+      "gt_unit_to_mm": 1000
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan1",
+      "scene_key": "DTU_scan1",
+      "prepared_scene_dir": "data/prepared/DTU/scan1",
+      "scene_root": "runs/DTU/scan1",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan40",
+      "scene_key": "DTU_scan40",
+      "prepared_scene_dir": "data/prepared/DTU/scan40",
+      "scene_root": "runs/DTU/scan40",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan69",
+      "scene_key": "DTU_scan69",
+      "prepared_scene_dir": "data/prepared/DTU/scan69",
+      "scene_root": "runs/DTU/scan69",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan97",
+      "scene_key": "DTU_scan97",
+      "prepared_scene_dir": "data/prepared/DTU/scan97",
+      "scene_root": "runs/DTU/scan97",
+      "gt_unit_to_mm": 1
+    }
+  ]
+}

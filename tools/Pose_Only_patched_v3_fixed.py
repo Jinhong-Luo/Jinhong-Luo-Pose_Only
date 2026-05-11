@@ -268,6 +268,57 @@ def select_top_quality_tracks(
     return {tid: obs for _, tid, obs in items}
 
 
+def select_qtrack_prefilter_ids(
+    track_scores: Dict[int, float],
+    mode: str = "none",
+    value: float = 0.0,
+    topk: int = 0,
+    min_kept_tracks: int = 0,
+) -> Tuple[set, Dict[str, float]]:
+    items = sorted(
+        ((float(q), int(tid)) for tid, q in track_scores.items()),
+        key=lambda x: (-x[0], x[1]),
+    )
+    if not items:
+        return set(), {"effective_threshold": float("nan"), "selected_count": 0, "candidate_count": 0}
+
+    selected: List[Tuple[float, int]]
+    effective_threshold = float("nan")
+    if mode == "none":
+        selected = items
+    elif mode == "threshold":
+        effective_threshold = float(value)
+        selected = [(q, tid) for q, tid in items if q >= effective_threshold]
+    elif mode == "quantile":
+        probs = np.array([q for q, _ in items], dtype=np.float64)
+        qv = float(np.clip(value, 0.0, 1.0))
+        effective_threshold = float(np.quantile(probs, qv))
+        selected = [(q, tid) for q, tid in items if q >= effective_threshold]
+    elif mode == "topk":
+        k = int(topk if topk > 0 else round(value))
+        k = max(0, min(k, len(items)))
+        selected = items[:k]
+        if selected:
+            effective_threshold = float(selected[-1][0])
+    else:
+        raise ValueError(f"Unknown qtrack prefilter mode: {mode}")
+
+    if min_kept_tracks > 0 and len(selected) < min_kept_tracks:
+        keep_n = min(int(min_kept_tracks), len(items))
+        selected = items[:keep_n]
+        if selected:
+            effective_threshold = float(selected[-1][0])
+
+    return (
+        {tid for _, tid in selected},
+        {
+            "effective_threshold": effective_threshold,
+            "selected_count": int(len(selected)),
+            "candidate_count": int(len(items)),
+        },
+    )
+
+
 def _stack_rows_from_skew_x(x: np.ndarray) -> np.ndarray:
     """Return 2 independent rows from [x]_x for normalized bearing x."""
     return skew(x)[:2, :]
@@ -588,6 +639,7 @@ def run_pose_adjustment(
     pa_max_init_rmse: float = 5e-2,
     pa_max_step_t: float = 0.0,
     pa_max_step_r_deg: float = 0.0,
+    pa_accept_any_update: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Dict[int, np.ndarray], Dict[str, object]]:
     """
     Conservative paper-style PA:
@@ -742,12 +794,16 @@ def run_pose_adjustment(
             stats["status"] = "rejected"
             stats.update(make_pa_reason("step_r_too_large", f"step_r_max_deg>{pa_max_step_r_deg:.3e}"))
             break
-        if cost_next + 1e-12 < cost_curr:
+        improved = bool(cost_next + 1e-12 < cost_curr)
+        if pa_accept_any_update or improved:
             R_curr, t_curr = R_next, t_next
             pts3d = pts_next
             cost_curr = cost_next
             rmse_curr = rmse_next
-            print(f"[PA {it+1}/{pa_iters}] accepted")
+            if pa_accept_any_update and not improved:
+                print(f"[PA {it+1}/{pa_iters}] accepted (accept_any_update)")
+            else:
+                print(f"[PA {it+1}/{pa_iters}] accepted")
             stats["status"] = "accepted"
         else:
             print(f"[PA {it+1}/{pa_iters}] rejected (no reprojection improvement)")
@@ -924,6 +980,13 @@ def solve_ligt_sparse(
     qtrack_mode: str = "weighted_sum",
     qtrack_threshold: float = 0.0,
     ligt_use_qtrack_weight: bool = False,
+    qtrack_prefilter_only: bool = False,
+    qtrack_prefilter_mode: str = "none",
+    qtrack_prefilter_value: float = 0.0,
+    qtrack_prefilter_topk: int = 0,
+    qtrack_prefilter_min_kept_tracks: int = 0,
+    qtrack_prefilter_rollback_min_selected_ratio: float = 0.0,
+    qtrack_prefilter_rollback_min_equation_ratio: float = 0.0,
     qtrack_config: Optional[Dict] = None,
     auto_quality_refs: bool = False,
 ) -> Tuple[np.ndarray, Dict[str, object], Dict[int, float]]:
@@ -993,14 +1056,33 @@ def solve_ligt_sparse(
         "equations_considered": 0,
         "equations_rejected_g": 0,
         "equations_kept": 0,
+        "tracks_candidates_qtrack": 0,
+        "tracks_selected_prefilter": 0,
+        "tracks_rejected_prefilter": 0,
         "qtrack_mode": qtrack_mode,
         "qtrack_config": qtrack_cfg,
+        "qtrack_prefilter_only": bool(qtrack_prefilter_only),
+        "qtrack_prefilter_mode": qtrack_prefilter_mode,
+        "qtrack_prefilter_value": float(qtrack_prefilter_value),
+        "qtrack_prefilter_topk": int(qtrack_prefilter_topk),
+        "qtrack_prefilter_min_kept_tracks": int(qtrack_prefilter_min_kept_tracks),
+        "qtrack_prefilter_rollback_min_selected_ratio": float(qtrack_prefilter_rollback_min_selected_ratio),
+        "qtrack_prefilter_rollback_min_equation_ratio": float(qtrack_prefilter_rollback_min_equation_ratio),
+        "qtrack_prefilter_rollback_used": False,
+        "qtrack_prefilter_rollback_reason": "",
+        "qtrack_prefilter_effective_active": bool(qtrack_prefilter_only),
     }
+    effective_prefilter_mode = qtrack_prefilter_mode
+    effective_prefilter_value = float(qtrack_prefilter_value)
+    if qtrack_prefilter_only and effective_prefilter_mode == "none" and qtrack_threshold > 0.0:
+        effective_prefilter_mode = "threshold"
+        effective_prefilter_value = float(qtrack_threshold)
+    diagnostics["qtrack_prefilter_mode_effective"] = effective_prefilter_mode
+    diagnostics["qtrack_prefilter_value_effective"] = effective_prefilter_value
 
-    for tid, obs in tqdm(items, desc="Build LiGT"):
+    def analyze_track(tid: int, obs: List[Tuple[int, np.ndarray]], *, build_blocks: bool) -> Optional[Dict[str, object]]:
         if len(obs) < min_track_len:
-            diagnostics["tracks_too_short"] += 1
-            continue
+            return None
         obs = sorted(obs, key=lambda x: x[0])
         frames = [int(f) for f, _ in obs]
         Xs = [np.asarray(X, np.float64).reshape(3,) for _, X in obs]
@@ -1016,65 +1098,62 @@ def solve_ligt_sparse(
             rng=rng,
         )
         if best is None or best_u < u_min:
-            diagnostics["tracks_no_base_pair"] += 1
-            continue
+            return None
 
         p_idx, q_idx = best
         f_xi, f_h = frames[p_idx], frames[q_idx]
         X_xi, X_h = Xs[p_idx], Xs[q_idx]
         u_xh = compute_u(R_abs[f_xi], R_abs[f_h], X_xi, X_h)
         if u_xh < u_min:
-            diagnostics["tracks_rejected_u"] += 1
-            continue
-        u_kept.append(float(u_xh))
+            return None
 
         aT = compute_aT(R_abs[f_xi], R_abs[f_h], X_xi, X_h)
         aTRh = (aT @ R_abs[f_h]).reshape(1, 3)
-        local_blocks = []
-        local_g = []
+        local_blocks = [] if build_blocks else None
+        local_g: List[float] = []
+        equations_considered = 0
+        equations_rejected_g = 0
 
         for k in range(len(frames)):
             f_i = frames[k]
             if f_i == f_xi or f_i == f_h:
                 continue
             X_i = Xs[k]
-
             R_xi_i = R_abs[f_i] @ R_abs[f_xi].T
             v = R_xi_i @ X_xi
-
-            # paper degeneracy note: if [X_i]_x R_{xi;i} X_xi == 0 => B=C=D=0 (no constraint)
             g = float(np.linalg.norm(skew(X_i) @ v))
-            diagnostics["equations_considered"] += 1
+            equations_considered += 1
             if g < g_min:
-                diagnostics["equations_rejected_g"] += 1
+                equations_rejected_g += 1
                 continue
-            g_kept.append(g)
             local_g.append(g)
 
-            Btmp = v.reshape(3, 1) @ aTRh.reshape(1, 3)
-            B = skew(X_i) @ Btmp
-            C = (u_xh ** 2) * (skew(X_i) @ R_abs[f_i])
-            D = -(B + C)  # coefficient for t_xi is -(B+C)
+            if build_blocks:
+                Btmp = v.reshape(3, 1) @ aTRh.reshape(1, 3)
+                B = skew(X_i) @ Btmp
+                C = (u_xh ** 2) * (skew(X_i) @ R_abs[f_i])
+                D = -(B + C)
 
-            if eq_norm == "fro":
-                denom = float(np.linalg.norm(B, "fro") + np.linalg.norm(C, "fro"))
-                if denom > 1e-12:
-                    w = 1.0 / denom
-                    B *= w; C *= w; D *= w
-            elif eq_norm == "u2":
-                denom = float(u_xh * u_xh)
-                if denom > 1e-12:
-                    w = 1.0 / denom
-                    B *= w; C *= w; D *= w
+                if eq_norm == "fro":
+                    denom = float(np.linalg.norm(B, "fro") + np.linalg.norm(C, "fro"))
+                    if denom > 1e-12:
+                        w = 1.0 / denom
+                        B *= w
+                        C *= w
+                        D *= w
+                elif eq_norm == "u2":
+                    denom = float(u_xh * u_xh)
+                    if denom > 1e-12:
+                        w = 1.0 / denom
+                        B *= w
+                        C *= w
+                        D *= w
 
-            cb_h, cb_i, cb_xi = col_base(f_h), col_base(f_i), col_base(f_xi)
-            local_blocks.append((cb_h, cb_i, cb_xi, B, C, D, float(g)))
-            if n_eq + len(local_blocks) >= max_equations:
-                break
-        if n_eq >= max_equations:
-            break
-        if len(local_blocks) == 0:
-            continue
+                cb_h, cb_i, cb_xi = col_base(f_h), col_base(f_i), col_base(f_xi)
+                local_blocks.append((cb_h, cb_i, cb_xi, B, C, D, float(g)))
+
+        if not local_g:
+            return None
 
         prior = track_quality_prior.get(int(tid), {}) if track_quality_prior else {}
         pair_q_mean = float(prior.get("pair_q_mean", 1.0))
@@ -1082,7 +1161,7 @@ def solve_ligt_sparse(
         base_pair_q = float(pair_quality_lookup.get((int(f_xi), int(f_h)), pair_q_mean)) if pair_quality_lookup else pair_q_mean
         pair_q_mean = 0.5 * (pair_q_mean + base_pair_q)
         pair_q_min = min(pair_q_min, base_pair_q)
-        g_stat = float(np.median(local_g)) if local_g else 0.0
+        g_stat = float(np.median(local_g))
         q_track = compute_qtrack(
             track_len=len(obs),
             pair_q_mean=pair_q_mean,
@@ -1092,40 +1171,271 @@ def solve_ligt_sparse(
             mode=qtrack_mode,
             config=qtrack_cfg,
         )
-        track_scores[int(tid)] = float(q_track)
-        # Keep threshold support for ablations, but default workflow should rely on soft weighting.
-        if enable_quality_weighting and qtrack_threshold > 0.0 and q_track < qtrack_threshold:
-            diagnostics["tracks_rejected_qtrack"] += 1
-            continue
-        qtrack_kept.append(float(q_track))
-        base_pair_q_kept.append(float(base_pair_q))
+        return {
+            "frames": frames,
+            "u_xh": float(u_xh),
+            "local_g": local_g,
+            "local_blocks": local_blocks,
+            "base_pair_q": float(base_pair_q),
+            "q_track": float(q_track),
+            "equations_considered": int(equations_considered),
+            "equations_rejected_g": int(equations_rejected_g),
+        }
 
-        track_prior = max(float(q_track), 1e-6) if (enable_quality_weighting and ligt_use_qtrack_weight) else 1.0
-        pair_prior = max(float(base_pair_q), 1e-6)
-        g_ref = max(float(qtrack_cfg.get("g_ref", 1e-6)), 1e-6)
+    if qtrack_prefilter_only:
+        track_meta: Dict[int, Dict[str, object]] = {}
+        for tid, obs in tqdm(items, desc="Score q_track"):
+            if len(obs) < min_track_len:
+                diagnostics["tracks_too_short"] += 1
+                continue
+            meta = analyze_track(int(tid), obs, build_blocks=False)
+            if meta is None:
+                obs_sorted = sorted(obs, key=lambda x: x[0])
+                frames = [int(f) for f, _ in obs_sorted]
+                Xs = [np.asarray(X, np.float64).reshape(3,) for _, X in obs_sorted]
+                best, best_u = choose_base_pair(
+                    frames,
+                    Xs,
+                    R_abs,
+                    max_candidates=base_pair_candidates,
+                    full_search_len=base_pair_full_search_len,
+                    min_gap=base_pair_min_gap,
+                    max_gap=base_pair_max_gap,
+                    rng=rng,
+                )
+                if best is None or best_u < u_min:
+                    diagnostics["tracks_no_base_pair"] += 1
+                else:
+                    diagnostics["tracks_rejected_u"] += 1
+                continue
+            track_meta[int(tid)] = meta
+            diagnostics["tracks_candidates_qtrack"] += 1
+            diagnostics["equations_considered"] += int(meta["equations_considered"])
+            diagnostics["equations_rejected_g"] += int(meta["equations_rejected_g"])
+            u_kept.append(float(meta["u_xh"]))
+            g_kept.extend(float(v) for v in meta["local_g"])
+            track_scores[int(tid)] = float(meta["q_track"])
 
-        for cb_h, cb_i, cb_xi, B, C, D, g_value in local_blocks:
-            eq_weight = 1.0
-            if enable_quality_weighting:
-                eq_g_quality = logistic_like_ratio(float(g_value), g_ref)
-                eq_quality = max(pair_prior * eq_g_quality, 1e-6)
-                eq_quality_kept.append(float(eq_quality))
-                eq_weight = eq_quality * track_prior
-            eq_scale = np.sqrt(eq_weight)
-            r0 = 3 * n_eq
-            if cb_h is not None:
-                add_block(r0, cb_h, eq_scale * B)
-            if cb_i is not None:
-                add_block(r0, cb_i, eq_scale * C)
-            if cb_xi is not None:
-                add_block(r0, cb_xi, eq_scale * D)
-            n_eq += 1
-            diagnostics["equations_kept"] += 1
+        selected_ids, prefilter_diag = select_qtrack_prefilter_ids(
+            track_scores,
+            mode=effective_prefilter_mode,
+            value=effective_prefilter_value,
+            topk=qtrack_prefilter_topk,
+            min_kept_tracks=qtrack_prefilter_min_kept_tracks,
+        )
+        diagnostics["tracks_selected_prefilter"] = int(prefilter_diag["selected_count"])
+        diagnostics["tracks_rejected_prefilter"] = int(prefilter_diag["candidate_count"] - prefilter_diag["selected_count"])
+        diagnostics["qtrack_prefilter_effective_threshold"] = float(prefilter_diag["effective_threshold"])
+        candidate_eq_available = max(
+            int(diagnostics["equations_considered"]) - int(diagnostics["equations_rejected_g"]),
+            0,
+        )
+        selected_ratio = safe_ratio(
+            diagnostics["tracks_selected_prefilter"],
+            max(diagnostics["tracks_candidates_qtrack"], 1),
+        )
+
+        def build_prefilter_selection(selected_track_ids: set) -> int:
+            nonlocal n_eq, rows, cols, data, qtrack_kept, base_pair_q_kept
+            rows = []
+            cols = []
+            data = []
+            n_eq = 0
+            qtrack_kept = []
+            base_pair_q_kept = []
+            diagnostics["equations_kept"] = 0
+            diagnostics["tracks_kept"] = 0
+
+            for tid, obs in tqdm(items, desc="Build LiGT"):
+                if int(tid) not in selected_track_ids:
+                    continue
+                meta = analyze_track(int(tid), obs, build_blocks=True)
+                if meta is None:
+                    continue
+                qtrack_kept.append(float(meta["q_track"]))
+                base_pair_q_kept.append(float(meta["base_pair_q"]))
+                local_blocks = meta["local_blocks"] or []
+                if n_eq + len(local_blocks) >= max_equations:
+                    local_blocks = local_blocks[: max(0, max_equations - n_eq)]
+                for cb_h, cb_i, cb_xi, B, C, D, _ in local_blocks:
+                    r0 = 3 * n_eq
+                    if cb_h is not None:
+                        add_block(r0, cb_h, B)
+                    if cb_i is not None:
+                        add_block(r0, cb_i, C)
+                    if cb_xi is not None:
+                        add_block(r0, cb_xi, D)
+                    n_eq += 1
+                    diagnostics["equations_kept"] += 1
+                    if n_eq >= max_equations:
+                        break
+                diagnostics["tracks_kept"] += 1
+                if n_eq >= max_equations:
+                    break
+            return int(diagnostics["equations_kept"])
+
+        rollback_reason = None
+        if (
+            qtrack_prefilter_rollback_min_selected_ratio > 0.0
+            and selected_ratio < float(qtrack_prefilter_rollback_min_selected_ratio)
+        ):
+            rollback_reason = (
+                f"selected_ratio:{selected_ratio:.3f}<"
+                f"{float(qtrack_prefilter_rollback_min_selected_ratio):.3f}"
+            )
+
+        eq_kept = build_prefilter_selection(selected_ids)
+        equation_ratio = safe_ratio(eq_kept, max(candidate_eq_available, 1))
+        diagnostics["qtrack_prefilter_selected_equation_ratio"] = float(equation_ratio)
+
+        if (
+            rollback_reason is None
+            and qtrack_prefilter_rollback_min_equation_ratio > 0.0
+            and equation_ratio < float(qtrack_prefilter_rollback_min_equation_ratio)
+        ):
+            rollback_reason = (
+                f"equation_ratio:{equation_ratio:.3f}<"
+                f"{float(qtrack_prefilter_rollback_min_equation_ratio):.3f}"
+            )
+
+        if rollback_reason is not None:
+            diagnostics["qtrack_prefilter_rollback_used"] = True
+            diagnostics["qtrack_prefilter_rollback_reason"] = rollback_reason
+            diagnostics["qtrack_prefilter_effective_active"] = False
+            diagnostics["tracks_selected_prefilter"] = int(len(track_meta))
+            diagnostics["tracks_rejected_prefilter"] = 0
+            diagnostics["qtrack_prefilter_effective_threshold"] = float("nan")
+            diagnostics["qtrack_prefilter_selected_equation_ratio"] = 1.0
+            print(f"[LiGT] q_track prefilter rollback -> no quality ({rollback_reason})")
+            build_prefilter_selection(set(track_meta.keys()))
+    else:
+        for tid, obs in tqdm(items, desc="Build LiGT"):
+            if len(obs) < min_track_len:
+                diagnostics["tracks_too_short"] += 1
+                continue
+            obs = sorted(obs, key=lambda x: x[0])
+            frames = [int(f) for f, _ in obs]
+            Xs = [np.asarray(X, np.float64).reshape(3,) for _, X in obs]
+
+            best, best_u = choose_base_pair(
+                frames,
+                Xs,
+                R_abs,
+                max_candidates=base_pair_candidates,
+                full_search_len=base_pair_full_search_len,
+                min_gap=base_pair_min_gap,
+                max_gap=base_pair_max_gap,
+                rng=rng,
+            )
+            if best is None or best_u < u_min:
+                diagnostics["tracks_no_base_pair"] += 1
+                continue
+
+            p_idx, q_idx = best
+            f_xi, f_h = frames[p_idx], frames[q_idx]
+            X_xi, X_h = Xs[p_idx], Xs[q_idx]
+            u_xh = compute_u(R_abs[f_xi], R_abs[f_h], X_xi, X_h)
+            if u_xh < u_min:
+                diagnostics["tracks_rejected_u"] += 1
+                continue
+            u_kept.append(float(u_xh))
+
+            aT = compute_aT(R_abs[f_xi], R_abs[f_h], X_xi, X_h)
+            aTRh = (aT @ R_abs[f_h]).reshape(1, 3)
+            local_blocks = []
+            local_g = []
+
+            for k in range(len(frames)):
+                f_i = frames[k]
+                if f_i == f_xi or f_i == f_h:
+                    continue
+                X_i = Xs[k]
+
+                R_xi_i = R_abs[f_i] @ R_abs[f_xi].T
+                v = R_xi_i @ X_xi
+
+                g = float(np.linalg.norm(skew(X_i) @ v))
+                diagnostics["equations_considered"] += 1
+                if g < g_min:
+                    diagnostics["equations_rejected_g"] += 1
+                    continue
+                g_kept.append(g)
+                local_g.append(g)
+
+                Btmp = v.reshape(3, 1) @ aTRh.reshape(1, 3)
+                B = skew(X_i) @ Btmp
+                C = (u_xh ** 2) * (skew(X_i) @ R_abs[f_i])
+                D = -(B + C)
+
+                if eq_norm == "fro":
+                    denom = float(np.linalg.norm(B, "fro") + np.linalg.norm(C, "fro"))
+                    if denom > 1e-12:
+                        w = 1.0 / denom
+                        B *= w; C *= w; D *= w
+                elif eq_norm == "u2":
+                    denom = float(u_xh * u_xh)
+                    if denom > 1e-12:
+                        w = 1.0 / denom
+                        B *= w; C *= w; D *= w
+
+                cb_h, cb_i, cb_xi = col_base(f_h), col_base(f_i), col_base(f_xi)
+                local_blocks.append((cb_h, cb_i, cb_xi, B, C, D, float(g)))
+                if n_eq + len(local_blocks) >= max_equations:
+                    break
             if n_eq >= max_equations:
                 break
-        diagnostics["tracks_kept"] += 1
-        if n_eq >= max_equations:
-            break
+            if len(local_blocks) == 0:
+                continue
+
+            prior = track_quality_prior.get(int(tid), {}) if track_quality_prior else {}
+            pair_q_mean = float(prior.get("pair_q_mean", 1.0))
+            pair_q_min = float(prior.get("pair_q_min", pair_q_mean))
+            base_pair_q = float(pair_quality_lookup.get((int(f_xi), int(f_h)), pair_q_mean)) if pair_quality_lookup else pair_q_mean
+            pair_q_mean = 0.5 * (pair_q_mean + base_pair_q)
+            pair_q_min = min(pair_q_min, base_pair_q)
+            g_stat = float(np.median(local_g)) if local_g else 0.0
+            q_track = compute_qtrack(
+                track_len=len(obs),
+                pair_q_mean=pair_q_mean,
+                pair_q_min=pair_q_min,
+                base_u=u_xh,
+                g_stat=g_stat,
+                mode=qtrack_mode,
+                config=qtrack_cfg,
+            )
+            track_scores[int(tid)] = float(q_track)
+            if enable_quality_weighting and qtrack_threshold > 0.0 and q_track < qtrack_threshold:
+                diagnostics["tracks_rejected_qtrack"] += 1
+                continue
+            qtrack_kept.append(float(q_track))
+            base_pair_q_kept.append(float(base_pair_q))
+
+            track_prior = max(float(q_track), 1e-6) if (enable_quality_weighting and ligt_use_qtrack_weight) else 1.0
+            pair_prior = max(float(base_pair_q), 1e-6)
+            g_ref = max(float(qtrack_cfg.get("g_ref", 1e-6)), 1e-6)
+
+            for cb_h, cb_i, cb_xi, B, C, D, g_value in local_blocks:
+                eq_weight = 1.0
+                if enable_quality_weighting:
+                    eq_g_quality = logistic_like_ratio(float(g_value), g_ref)
+                    eq_quality = max(pair_prior * eq_g_quality, 1e-6)
+                    eq_quality_kept.append(float(eq_quality))
+                    eq_weight = eq_quality * track_prior
+                eq_scale = np.sqrt(eq_weight)
+                r0 = 3 * n_eq
+                if cb_h is not None:
+                    add_block(r0, cb_h, eq_scale * B)
+                if cb_i is not None:
+                    add_block(r0, cb_i, eq_scale * C)
+                if cb_xi is not None:
+                    add_block(r0, cb_xi, eq_scale * D)
+                n_eq += 1
+                diagnostics["equations_kept"] += 1
+                if n_eq >= max_equations:
+                    break
+            diagnostics["tracks_kept"] += 1
+            if n_eq >= max_equations:
+                break
 
     if n_eq == 0:
         raise RuntimeError("No LiGT equations. Try lower thresholds or better tracks.")
@@ -1174,6 +1484,7 @@ def solve_ligt_sparse(
     # IRLS loop: reweight equations using Huber weights on 3D residual norms.
     w_row = np.ones(n_rows, dtype=np.float64)
     t_vec = None
+    irls_residual_history: List[Dict[str, float]] = []
     for it in range(max(0, irls_iters) + 1):
         Lw = L.multiply(w_row[:, None]) if it > 0 else L
         A = (Lw.T @ Lw).tocsr()
@@ -1212,9 +1523,19 @@ def solve_ligt_sparse(
         # row weights are sqrt(w_eq) repeated for the 3 rows of each equation block
         w_row = np.repeat(np.sqrt(w_eq), 3)
         rq = np.quantile(rn, [0.5, 0.9, 0.99])
+        irls_residual_history.append({
+            "iter": float(it + 1),
+            "median": float(rq[0]),
+            "p90": float(rq[1]),
+            "p99": float(rq[2]),
+            "huber_delta": float(delta),
+            "downweighted_equation_ratio": float(np.mean(big)) if big.size else 0.0,
+        })
         print(f"[LiGT][IRLS {it+1}/{irls_iters}] residual norm median={med:.3e}, p90={rq[1]:.3e}, p99={rq[2]:.3e}, huber_delta={delta:.3e}")
 
     assert t_vec is not None
+    r_final = np.asarray(L @ t_vec).reshape(-1)
+    rn_final = np.linalg.norm(r_final.reshape(-1, 3), axis=1) if r_final.size else np.zeros((0,), dtype=np.float64)
     t_red = t_vec.reshape(-1, 3)
 
     # insert ref translation = 0
@@ -1273,9 +1594,14 @@ def solve_ligt_sparse(
         "qtrack_stats": summarize_array(qtrack_kept),
         "base_pair_q_stats": summarize_array(base_pair_q_kept),
         "equation_quality_stats": summarize_array(eq_quality_kept),
+        "ligt_irls_iters": int(irls_iters),
+        "ligt_irls_huber_k": float(irls_huber_k),
+        "ligt_irls_residual_history": irls_residual_history,
+        "ligt_residual_final_stats": summarize_array(rn_final),
         "g_reject_ratio": safe_ratio(diagnostics["equations_rejected_g"], max(diagnostics["equations_considered"], 1)),
         "qtrack_reject_ratio": safe_ratio(diagnostics["tracks_rejected_qtrack"], max(diagnostics["tracks_sampled"], 1)),
         "kept_track_ratio": safe_ratio(diagnostics["tracks_kept"], max(diagnostics["tracks_sampled"], 1)),
+        "qtrack_selected_ratio": safe_ratio(diagnostics["tracks_selected_prefilter"], max(diagnostics["tracks_candidates_qtrack"], 1)),
     })
 
     return t_all, diagnostics, track_scores
@@ -1336,6 +1662,19 @@ def main():
     ap.add_argument("--qtrack_threshold", type=float, default=0.0,
                     help="optional hard gate on q_track; default 0 disables filtering and relies on soft weighting instead")
     ap.add_argument("--ligt_use_qtrack_weight", action="store_true")
+    ap.add_argument("--qtrack_prefilter_only", action="store_true",
+                    help="Use q_track only as a LiGT prefilter; do not propagate q_track or equation quality into equation weights.")
+    ap.add_argument("--qtrack_prefilter_mode", choices=["none", "threshold", "quantile", "topk"], default="none")
+    ap.add_argument("--qtrack_prefilter_value", type=float, default=0.0,
+                    help="Threshold value, lower-tail quantile, or fallback topk value depending on qtrack_prefilter_mode.")
+    ap.add_argument("--qtrack_prefilter_topk", type=int, default=0,
+                    help="Used when qtrack_prefilter_mode=topk. If 0, qtrack_prefilter_value is rounded to an integer.")
+    ap.add_argument("--qtrack_prefilter_min_kept_tracks", type=int, default=0,
+                    help="Ensure at least this many tracks survive q_track prefiltering when possible.")
+    ap.add_argument("--qtrack_prefilter_rollback_min_selected_ratio", type=float, default=0.0,
+                    help="If positive and prefilter keeps fewer than this fraction of q_track candidates, disable prefilter and fall back to no quality.")
+    ap.add_argument("--qtrack_prefilter_rollback_min_equation_ratio", type=float, default=0.0,
+                    help="If positive and prefilter keeps fewer than this fraction of candidate LiGT equations, disable prefilter and fall back to no quality.")
     ap.add_argument("--quality_config", type=str, default=None, help="optional JSON config with a qtrack section")
     ap.add_argument("--auto_quality_refs", action="store_true", help="fit q_track reference scales from current LiGT statistics")
     ap.add_argument("--pa_use_qtrack", action="store_true")
@@ -1358,6 +1697,7 @@ def main():
     ap.add_argument("--pa_f_scale", type=float, default=1e-3, help="Robust loss scale used by scipy.least_squares.")
     ap.add_argument("--pa_max_step_t", type=float, default=0.0, help="Reject PA update when max translation step exceeds this value. 0 disables.")
     ap.add_argument("--pa_max_step_r_deg", type=float, default=0.0, help="Reject PA update when max rotation step exceeds this value in degrees. 0 disables.")
+    ap.add_argument("--pa_accept_any_update", action="store_true", help="Accept PA updates even when reprojection cost does not improve.")
 
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
@@ -1443,6 +1783,13 @@ def main():
         qtrack_mode=args.qtrack_mode,
         qtrack_threshold=args.qtrack_threshold,
         ligt_use_qtrack_weight=args.ligt_use_qtrack_weight,
+        qtrack_prefilter_only=args.qtrack_prefilter_only,
+        qtrack_prefilter_mode=args.qtrack_prefilter_mode,
+        qtrack_prefilter_value=args.qtrack_prefilter_value,
+        qtrack_prefilter_topk=args.qtrack_prefilter_topk,
+        qtrack_prefilter_min_kept_tracks=args.qtrack_prefilter_min_kept_tracks,
+        qtrack_prefilter_rollback_min_selected_ratio=args.qtrack_prefilter_rollback_min_selected_ratio,
+        qtrack_prefilter_rollback_min_equation_ratio=args.qtrack_prefilter_rollback_min_equation_ratio,
         qtrack_config=qtrack_config,
         auto_quality_refs=args.auto_quality_refs,
     )
@@ -1460,6 +1807,12 @@ def main():
             "output_path": os.path.join(args.out_dir, "quality_config_used.json"),
             "decision_parameters": {
                 "qtrack_threshold": float(args.qtrack_threshold),
+                "qtrack_prefilter_mode": str(args.qtrack_prefilter_mode),
+                "qtrack_prefilter_value": float(args.qtrack_prefilter_value),
+                "qtrack_prefilter_topk": int(args.qtrack_prefilter_topk),
+                "qtrack_prefilter_min_kept_tracks": int(args.qtrack_prefilter_min_kept_tracks),
+                "qtrack_prefilter_rollback_min_selected_ratio": float(args.qtrack_prefilter_rollback_min_selected_ratio),
+                "qtrack_prefilter_rollback_min_equation_ratio": float(args.qtrack_prefilter_rollback_min_equation_ratio),
                 "u_min": float(args.u_min),
                 "g_min": float(args.g_min),
                 "pa_max_init_rmse": float(args.pa_max_init_rmse),
@@ -1467,6 +1820,7 @@ def main():
             "weighting_flags": {
                 "enable_quality_weighting": bool(args.enable_quality_weighting),
                 "ligt_use_qtrack_weight": bool(args.ligt_use_qtrack_weight),
+                "qtrack_prefilter_only": bool(args.qtrack_prefilter_only),
                 "pa_use_qtrack": bool(args.pa_use_qtrack),
             },
         },
@@ -1546,6 +1900,7 @@ def main():
                 pa_max_init_rmse=args.pa_max_init_rmse,
                 pa_max_step_t=args.pa_max_step_t,
                 pa_max_step_r_deg=args.pa_max_step_r_deg,
+                pa_accept_any_update=args.pa_accept_any_update,
             )
             R_abs = R_pa
             np.save(os.path.join(args.out_dir, "t_all_pa.npy"), t_all)

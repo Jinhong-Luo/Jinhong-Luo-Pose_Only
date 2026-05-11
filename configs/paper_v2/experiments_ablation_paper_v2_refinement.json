@@ -1,0 +1,53 @@
+{
+  "output_root_base": "runs/paper_v2/ablation_paper_v2/refinement",
+  "quality_config_override": "configs/quality_config.no_rraa_weighting.json",
+  "groups": [
+    {
+      "name": "R0_no_refinement",
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": false,
+      "ligt_use_qtrack_weight": false,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.01,
+      "g_min": 0.001,
+      "irls_iters": 1,
+      "qtrack_threshold": 0.0
+    },
+    {
+      "name": "R1_pa_always_accept",
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "pa_use_qtrack": false,
+      "pa_accept_any_update": true,
+      "enable_degeneracy_guard": false,
+      "pa_skip_on_degenerate": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": false,
+      "ligt_use_qtrack_weight": false,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.01,
+      "g_min": 0.001,
+      "irls_iters": 1,
+      "qtrack_threshold": 0.0
+    },
+    {
+      "name": "R2_pa_conservative_accept",
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "pa_use_qtrack": false,
+      "pa_accept_any_update": false,
+      "enable_degeneracy_guard": true,
+      "pa_skip_on_degenerate": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": false,
+      "ligt_use_qtrack_weight": false,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.01,
+      "g_min": 0.001,
+      "irls_iters": 1,
+      "qtrack_threshold": 0.0
+    }
+  ]
+}

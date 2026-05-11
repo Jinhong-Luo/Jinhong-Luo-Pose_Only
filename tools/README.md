@@ -11,8 +11,10 @@ Main active scripts:
   - `prepare_rotation_source.py`
 - frontend:
   - `build_lightglue_tracks_npz.py`
+  - `build_lightglue_pycolmap_tracks_npz.py`
   - `frontend_cache.py`
   - `frontend_precompute.py`
+  - `colmap_points_to_tracks_npz.py`
 - solvers:
   - `RRAA_fast.py`
   - `Pose_Only_patched_v3_fixed.py`

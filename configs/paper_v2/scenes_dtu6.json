@@ -1,0 +1,53 @@
+{
+  "name": "paper_v2_dtu6",
+  "scenes": [
+    {
+      "dataset": "DTU",
+      "scene_id": "scan24",
+      "scene_key": "DTU_scan24",
+      "prepared_scene_dir": "data/prepared/DTU/scan24",
+      "scene_root": "runs/DTU/scan24",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan37",
+      "scene_key": "DTU_scan37",
+      "prepared_scene_dir": "data/prepared/DTU/scan37",
+      "scene_root": "runs/DTU/scan37",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan40",
+      "scene_key": "DTU_scan40",
+      "prepared_scene_dir": "data/prepared/DTU/scan40",
+      "scene_root": "runs/DTU/scan40",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan55",
+      "scene_key": "DTU_scan55",
+      "prepared_scene_dir": "data/prepared/DTU/scan55",
+      "scene_root": "runs/DTU/scan55",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan65",
+      "scene_key": "DTU_scan65",
+      "prepared_scene_dir": "data/prepared/DTU/scan65",
+      "scene_root": "runs/DTU/scan65",
+      "gt_unit_to_mm": 1
+    },
+    {
+      "dataset": "DTU",
+      "scene_id": "scan106",
+      "scene_key": "DTU_scan106",
+      "prepared_scene_dir": "data/prepared/DTU/scan106",
+      "scene_root": "runs/DTU/scan106",
+      "gt_unit_to_mm": 1
+    }
+  ]
+}

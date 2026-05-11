@@ -1,0 +1,175 @@
+{
+  "name": "frontend_eth3d5_pycolmap",
+  "quality_config": "configs/quality_config.template.json",
+  "output_root": "runs/paper_v2/frontend_eth3d5_pycolmap",
+  "scenes": [
+    {
+      "name": "ETH3D_courtyard",
+      "scene_id": "courtyard",
+      "scene_root": "runs/paper_v2/pycolmap_bridge_eth3d5/courtyard",
+      "prepared_scene_dir": "data/prepared/ETH3D/courtyard",
+      "frontend_cache_dir": "runs/paper_v2/pycolmap_bridge_eth3d5/courtyard/feature_cache",
+      "frontend_stages": [
+        {
+          "name": "tracks_pycolmap",
+          "cmd": [
+            "{python}",
+            "tools/build_lightglue_pycolmap_tracks_npz.py",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_dir", "{scene_root}",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--deltas", "1,2,3,5",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--feature_cache_dir", "{frontend_cache_dir}",
+            "--min_track_len", "2",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs"
+          ],
+          "reuse_outputs": [
+            "{scene_root}/tracks/track_build_quality_stats.json",
+            "{scene_root}/pycolmap_track_build_stats.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ETH3D_delivery_area",
+      "scene_id": "delivery_area",
+      "scene_root": "runs/paper_v2/pycolmap_bridge_eth3d5/delivery_area",
+      "prepared_scene_dir": "data/prepared/ETH3D/delivery_area",
+      "frontend_cache_dir": "runs/paper_v2/pycolmap_bridge_eth3d5/delivery_area/feature_cache",
+      "frontend_stages": [
+        {
+          "name": "tracks_pycolmap",
+          "cmd": [
+            "{python}",
+            "tools/build_lightglue_pycolmap_tracks_npz.py",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_dir", "{scene_root}",
+            "--dataset", "custom",
+            "--K_npy", "{prepared_scene_dir}/K.npy",
+            "--deltas", "1,2,3,5",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--feature_cache_dir", "{frontend_cache_dir}",
+            "--min_track_len", "2",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs"
+          ],
+          "reuse_outputs": [
+            "{scene_root}/tracks/track_build_quality_stats.json",
+            "{scene_root}/pycolmap_track_build_stats.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ETH3D_office",
+      "scene_id": "office",
+      "scene_root": "runs/paper_v2/pycolmap_bridge_eth3d5/office",
+      "prepared_scene_dir": "data/prepared/ETH3D/office",
+      "frontend_cache_dir": "runs/paper_v2/pycolmap_bridge_eth3d5/office/feature_cache",
+      "frontend_stages": [
+        {
+          "name": "tracks_pycolmap",
+          "cmd": [
+            "{python}",
+            "tools/build_lightglue_pycolmap_tracks_npz.py",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_dir", "{scene_root}",
+            "--dataset", "custom",
+            "--K_npy", "{prepared_scene_dir}/K.npy",
+            "--deltas", "1,2,3,5",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--feature_cache_dir", "{frontend_cache_dir}",
+            "--min_track_len", "2",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs"
+          ],
+          "reuse_outputs": [
+            "{scene_root}/tracks/track_build_quality_stats.json",
+            "{scene_root}/pycolmap_track_build_stats.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ETH3D_terrace",
+      "scene_id": "terrace",
+      "scene_root": "runs/paper_v2/pycolmap_bridge_eth3d5/terrace",
+      "prepared_scene_dir": "data/prepared/ETH3D/terrace",
+      "frontend_cache_dir": "runs/paper_v2/pycolmap_bridge_eth3d5/terrace/feature_cache",
+      "frontend_stages": [
+        {
+          "name": "tracks_pycolmap",
+          "cmd": [
+            "{python}",
+            "tools/build_lightglue_pycolmap_tracks_npz.py",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_dir", "{scene_root}",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--deltas", "1,2,3,5",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--feature_cache_dir", "{frontend_cache_dir}",
+            "--min_track_len", "2",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs"
+          ],
+          "reuse_outputs": [
+            "{scene_root}/tracks/track_build_quality_stats.json",
+            "{scene_root}/pycolmap_track_build_stats.json"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ETH3D_electro",
+      "scene_id": "electro",
+      "scene_root": "runs/paper_v2/pycolmap_bridge_eth3d5/electro",
+      "prepared_scene_dir": "data/prepared/ETH3D/electro",
+      "frontend_cache_dir": "runs/paper_v2/pycolmap_bridge_eth3d5/electro/feature_cache",
+      "frontend_stages": [
+        {
+          "name": "tracks_pycolmap",
+          "cmd": [
+            "{python}",
+            "tools/build_lightglue_pycolmap_tracks_npz.py",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_dir", "{scene_root}",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--deltas", "1,2,3,5",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--feature_cache_dir", "{frontend_cache_dir}",
+            "--min_track_len", "2",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs"
+          ],
+          "reuse_outputs": [
+            "{scene_root}/tracks/track_build_quality_stats.json",
+            "{scene_root}/pycolmap_track_build_stats.json"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -38,3 +38,8 @@ third_party/**/checkpoints/
 
 # Prepared data is kept locally and not pushed by default
 data/prepared/
+
+# Local COLMAP outputs and AI paper bundles
+Colmap_runs/
+paper_ai_bundle/
+paper_ai_bundle*.zip

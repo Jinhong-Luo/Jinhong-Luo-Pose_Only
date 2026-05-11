@@ -1,0 +1,70 @@
+{
+  "output_root_base": "runs/paper_v2/ablation_v1/degeneracy",
+  "groups": [
+    {
+      "name": "D0_no_degeneracy",
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "ligt_use_qtrack_weight": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.0,
+      "g_min": 0.0,
+      "irls_iters": 0,
+      "qtrack_threshold": 0.0
+    },
+    {
+      "name": "D1_geom_filter_only",
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "ligt_use_qtrack_weight": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.0,
+      "g_min": 0.001,
+      "irls_iters": 0,
+      "qtrack_threshold": 0.0
+    },
+    {
+      "name": "D2_basepair_only",
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "ligt_use_qtrack_weight": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.01,
+      "g_min": 0.0,
+      "irls_iters": 0,
+      "qtrack_threshold": 0.0
+    },
+    {
+      "name": "D3_robust_only",
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "ligt_use_qtrack_weight": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.0,
+      "g_min": 0.0,
+      "irls_iters": 1,
+      "qtrack_threshold": 0.2
+    },
+    {
+      "name": "D4_full_degeneracy",
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "ligt_use_qtrack_weight": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.01,
+      "g_min": 0.001,
+      "irls_iters": 1,
+      "qtrack_threshold": 0.2
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from calib_utils import (
 )
 from degeneracy_utils import dump_json, safe_ratio, summarize_array
 from frontend_cache import build_lightglue_frontend, load_or_extract_feature, read_gray_u8, resolve_device
+from pair_match_cache import extract_pair_matches, load_pair_match_cache, save_pair_match_cache
 from quality_utils import (
     compute_qpair,
     infer_qpair_config,
@@ -201,6 +202,8 @@ def main():
                     help="save pair/track quality sidecar files for later LiGT/PA weighting")
     ap.add_argument("--feature_cache_dir", type=str, default=None,
                     help="optional directory for reusable SuperPoint feature cache")
+    ap.add_argument("--pair_match_cache_dir", type=str, default=None,
+                    help="optional directory for reusable pair raw match cache")
     ap.add_argument("--quality_config", type=str, default=None,
                     help="optional JSON config with a qpair section")
     ap.add_argument("--auto_quality_refs", action="store_true",
@@ -321,40 +324,59 @@ def main():
             gap_attempts[int(d)] += 1
             feats1 = feats_cache[j]
             kpts1_save = kpts_save_all[j]
-            with torch.no_grad():
-                out = matcher({"image0": feats0, "image1": feats1})
+            kpts0_raw = feats_cache[i]["keypoints"][0].detach().cpu().numpy().astype(np.float64)
+            kpts1_raw = feats_cache[j]["keypoints"][0].detach().cpu().numpy().astype(np.float64)
+            cached_pair = load_pair_match_cache(args.pair_match_cache_dir, i, j)
+            if cached_pair is not None:
+                matches = cached_pair["matches"]
+                pair_scores_full = cached_pair["pair_scores"]
+                pts0_cached = cached_pair.get("pts0")
+                pts1_cached = cached_pair.get("pts1")
+            else:
+                with torch.no_grad():
+                    out = matcher({"image0": feats0, "image1": feats1})
+                matches, pair_scores_full = extract_pair_matches(out, mutual=args.mutual)
+                pts0_cached = kpts0_raw[matches[:, 0]].astype(np.float32, copy=False) if matches.shape[0] > 0 else np.zeros((0, 2), dtype=np.float32)
+                pts1_cached = kpts1_raw[matches[:, 1]].astype(np.float32, copy=False) if matches.shape[0] > 0 else np.zeros((0, 2), dtype=np.float32)
+                if args.pair_match_cache_dir:
+                    save_pair_match_cache(args.pair_match_cache_dir, i, j, matches, pair_scores_full, pts0_cached, pts1_cached)
 
-            m0 = out["matches0"][0].detach().cpu().numpy().astype(np.int64)
-            valid = (m0 >= 0)
-            nmatch_raw = int(valid.sum())
+            nmatch_raw = int(matches.shape[0])
             score_mean = np.nan
             score_med = np.nan
 
-            if args.mutual and ("matches1" in out):
-                m1 = out["matches1"][0].detach().cpu().numpy().astype(np.int64)
-                idx0_all = np.arange(m0.shape[0], dtype=np.int64)
-                jj = m0.copy()
-                ok = valid.copy()
-                ok[valid] &= (m1[jj[valid]] == idx0_all[valid])
-                valid &= ok
+            if nmatch_raw > 0:
+                idx0 = matches[:, 0].astype(np.int64, copy=False)
+                idx1 = matches[:, 1].astype(np.int64, copy=False)
+            else:
+                idx0 = np.zeros((0,), dtype=np.int64)
+                idx1 = np.zeros((0,), dtype=np.int64)
 
-            s0 = None
-            if "matching_scores0" in out:
-                s0 = out["matching_scores0"][0].detach().cpu().numpy()
-            if args.min_score > 0 and s0 is not None:
-                valid &= (s0 >= args.min_score)
+            pair_scores = pair_scores_full
+            pts0_pair = pts0_cached if pts0_cached is not None else None
+            pts1_pair = pts1_cached if pts1_cached is not None else None
+            if args.min_score > 0 and pair_scores is not None and idx0.size > 0:
+                keep = pair_scores >= args.min_score
+                idx0 = idx0[keep]
+                idx1 = idx1[keep]
+                pair_scores = pair_scores[keep]
+                if pts0_pair is not None:
+                    pts0_pair = pts0_pair[keep]
+                if pts1_pair is not None:
+                    pts1_pair = pts1_pair[keep]
 
-            idx0 = np.where(valid)[0]
-            idx1 = m0[idx0]
-            if s0 is not None and idx0.size > 0:
-                pair_scores = s0[idx0]
+            if pair_scores is not None and idx0.size > 0:
                 score_mean = float(np.mean(pair_scores))
                 score_med = float(np.median(pair_scores))
 
             if args.use_ransac:
                 if len(idx0) >= 8:
-                    pts0 = kpts0_save[idx0].astype(np.float64)
-                    pts1 = kpts1_save[idx1].astype(np.float64)
+                    if pts0_pair is not None and pts1_pair is not None and not args.undistort:
+                        pts0 = pts0_pair.astype(np.float64, copy=False)
+                        pts1 = pts1_pair.astype(np.float64, copy=False)
+                    else:
+                        pts0 = kpts0_save[idx0].astype(np.float64)
+                        pts1 = kpts1_save[idx1].astype(np.float64)
                     if Ks is not None:
                         K0 = Ks[int(image_K_idx[i])]
                         K1 = Ks[int(image_K_idx[j])]

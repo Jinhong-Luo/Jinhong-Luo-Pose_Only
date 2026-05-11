@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CORE_NUMERIC_FIELDS = [
     "rotation_median_deg",
@@ -53,6 +53,10 @@ CORE_NUMERIC_FIELDS = [
     "pa_accept_iters",
     "delta_translation_mm_median",
     "delta_translation_mm_p90",
+    "runtime_total_sec",
+    "peak_memory_mb",
+    "runtime_rraa_sec",
+    "runtime_pose_only_sec",
 ]
 
 MAIN_COLUMNS = [
@@ -115,6 +119,10 @@ MAIN_COLUMNS = [
     "baseline_experiment_group",
     "delta_translation_mm_median",
     "delta_translation_mm_p90",
+    "runtime_total_sec",
+    "peak_memory_mb",
+    "runtime_rraa_sec",
+    "runtime_pose_only_sec",
     "status",
     "missing_files",
     "generated_files",
@@ -743,6 +751,10 @@ def extract_from_payloads(
         "pa_failure_stage": (pa_stats or {}).get("failure_stage") if isinstance(pa_stats, dict) else None,
         "pa_final_rmse": safe_float((pa_stats or {}).get("final_rmse") if isinstance(pa_stats, dict) else None),
         "pa_accept_iters": safe_float(len((pa_stats or {}).get("iterations", [])) if isinstance(pa_stats, dict) and isinstance(pa_stats.get("iterations"), list) else None),
+        "runtime_total_sec": safe_float(summary_payload.get("runtime_total_sec") if isinstance(summary_payload, dict) else None),
+        "peak_memory_mb": safe_float(summary_payload.get("peak_memory_mb") if isinstance(summary_payload, dict) else None),
+        "runtime_rraa_sec": safe_float((summary_payload or {}).get("runtime_by_step_sec", {}).get("rraa") if isinstance(summary_payload, dict) and isinstance(summary_payload.get("runtime_by_step_sec"), dict) else None),
+        "runtime_pose_only_sec": safe_float((summary_payload or {}).get("runtime_by_step_sec", {}).get("pose_only") if isinstance(summary_payload, dict) and isinstance(summary_payload.get("runtime_by_step_sec"), dict) else None),
         "threshold_group": None,
         "baseline_experiment_group": None,
         "delta_translation_mm_median": None,
@@ -1035,7 +1047,15 @@ def main() -> None:
 
     manifest = load_manifest(args.manifest)
     defaults = manifest.get("defaults", {})
-    output_dir = resolve_path(args.output_dir or defaults.get("output_dir") or "runs/paper_benchmark_eval", base_dir=manifest["_manifest_dir"])
+    if args.output_dir:
+        # CLI-provided paths should behave like normal shell paths and resolve
+        # relative to the caller's working directory, not the manifest folder.
+        output_dir = resolve_path(args.output_dir, base_dir=os.getcwd())
+    else:
+        output_dir = resolve_path(
+            defaults.get("output_dir") or "runs/paper_benchmark_eval",
+            base_dir=manifest["_manifest_dir"],
+        )
     os.makedirs(output_dir, exist_ok=True)
 
     scenes = select_scene_entries(manifest, parse_csv_list_arg(args.scene_tags))

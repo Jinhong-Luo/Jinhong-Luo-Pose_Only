@@ -1,0 +1,128 @@
+{
+  "name": "paper_benchmark_manifest_dtu3_extra_selected",
+  "defaults": {
+    "output_dir": "runs/paper_v2/eval_dtu3_extra_selected",
+    "gt_unit_to_mm": 1.0
+  },
+  "default_scene_tags": [
+    "dtu3_extra_selected"
+  ],
+  "default_experiment_tags": [
+    "main"
+  ],
+  "datasets": [
+    {
+      "name": "DTU",
+      "scenes": [
+        {
+          "scene": "scan69",
+          "scene_slug": "DTU_scan69",
+          "tags": [
+            "dtu3_extra_selected",
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/DTU/scan69",
+          "scene_run_root_candidates": [
+            "runs/DTU/scan69"
+          ]
+        },
+        {
+          "scene": "scan97",
+          "scene_slug": "DTU_scan97",
+          "tags": [
+            "dtu3_extra_selected",
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/DTU/scan97",
+          "scene_run_root_candidates": [
+            "runs/DTU/scan97"
+          ]
+        },
+        {
+          "scene": "scan114",
+          "scene_slug": "DTU_scan114",
+          "tags": [
+            "dtu3_extra_selected",
+            "main"
+          ],
+          "prepared_scene_dir": "data/prepared/DTU/scan114",
+          "scene_run_root_candidates": [
+            "runs/DTU/scan114"
+          ]
+        }
+      ]
+    }
+  ],
+  "experiment_groups": [
+    {
+      "name": "gt_ligt",
+      "tags": [
+        "main",
+        "gt"
+      ],
+      "rotation_source": "GT",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/gt_ligt/{scene_slug}"
+      ]
+    },
+    {
+      "name": "gt_ligt_pa",
+      "tags": [
+        "main",
+        "gt"
+      ],
+      "rotation_source": "GT",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": false,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/gt_ligt_pa/{scene_slug}"
+      ]
+    },
+    {
+      "name": "rraa_ligt",
+      "tags": [
+        "main",
+        "rraa"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": false,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/rraa_ligt/{scene_slug}",
+        "runs/paper_v2/dtu_rraa_screening/rraa_ligt/{scene_slug}"
+      ]
+    },
+    {
+      "name": "rraa_ligt_pa",
+      "tags": [
+        "main",
+        "rraa"
+      ],
+      "rotation_source": "RRAA",
+      "use_pa": true,
+      "qtrack_mode": "weighted_sum",
+      "enable_quality_weighting": true,
+      "rraa_use_qpair_weight": true,
+      "u_min": 0.001,
+      "g_min": 0.001,
+      "run_dir_candidates": [
+        "runs/paper_v2/main/rraa_ligt_pa/{scene_slug}",
+        "runs/paper_v2/dtu_rraa_screening/rraa_ligt_pa/{scene_slug}"
+      ]
+    }
+  ]
+}

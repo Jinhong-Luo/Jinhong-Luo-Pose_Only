@@ -14,7 +14,7 @@ def load_json_if_exists(path: str):
         return None
     if not os.path.exists(path):
         return None
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--qtrack_npz", default=None)
     ap.add_argument("--rraa_eval_json", default=None)
     ap.add_argument("--pose_eval_json", default=None)
+    ap.add_argument("--step_metrics_json", default=None)
     args = ap.parse_args()
 
     run_dir = os.path.abspath(args.run_dir)
@@ -103,6 +104,10 @@ def main():
         os.path.join(run_dir, "poseonly_baseline", "eval_translation_ligt.json"),
         os.path.join(run_dir, "pose_only", "eval_translation.json"),
     ))
+    step_metrics = load_json_if_exists(first_existing_path(
+        args.step_metrics_json,
+        os.path.join(run_dir, "step_metrics.json"),
+    ))
 
     qtrack_summary = None
     if qtrack_npz is not None and "q_track" in qtrack_npz.files:
@@ -125,6 +130,29 @@ def main():
     elif isinstance(rraa_eval, dict):
         best_rraa_eval = rraa_eval
 
+    runtime_total_sec = None
+    peak_memory_mb = None
+    runtime_by_step = {}
+    peak_memory_by_step = {}
+    if isinstance(step_metrics, dict):
+        elapsed_values = []
+        peak_values = []
+        for step_name, payload in step_metrics.items():
+            if not isinstance(payload, dict):
+                continue
+            elapsed = pick(payload, "elapsed_sec")
+            peak_mb = pick(payload, "peak_working_set_mb")
+            if elapsed is not None:
+                runtime_by_step[step_name] = elapsed
+                elapsed_values.append(float(elapsed))
+            if peak_mb is not None:
+                peak_memory_by_step[step_name] = peak_mb
+                peak_values.append(float(peak_mb))
+        if elapsed_values:
+            runtime_total_sec = float(sum(elapsed_values))
+        if peak_values:
+            peak_memory_mb = float(max(peak_values))
+
     summary = {
         "run_dir": run_dir,
         "tracks_count": pick(track_stats, "track_stats", "count"),
@@ -145,6 +173,10 @@ def main():
         "rotation_eval_median_deg": pick(best_rraa_eval, "median_deg"),
         "translation_eval_raw_median": pick(pose_eval, "raw", "median"),
         "translation_eval_mm_median": pick(pose_eval, "mm", "median"),
+        "runtime_total_sec": runtime_total_sec,
+        "peak_memory_mb": peak_memory_mb,
+        "runtime_by_step_sec": runtime_by_step or None,
+        "peak_memory_by_step_mb": peak_memory_by_step or None,
     }
 
     out_json = args.out_json or os.path.join(run_dir, "experiment_summary.json")

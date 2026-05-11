@@ -1,4 +1,9 @@
 {
+  "baseline_name": "paper_v2_phase2_5_frontend_baseline_2026-04-16",
+  "previous_params_backup": "configs/paper_v2/params_best_before_phase2_5_baseline_2026-04-16.json",
+  "frontend_baseline_config": "configs/paper_v2/frontend_baseline_phase2_5_12scenes.json",
+  "recommended_scenes_config": "configs/paper_v2/scenes_strecha6_dtu6_12scenes.json",
+  "recommended_experiments_config": "configs/paper_v2/experiments_main_phase2_5_frontend.json",
   "quality_config": "configs/quality_config.template.json",
   "qpair_threshold": 0.0,
   "qtrack_threshold": 0.0,

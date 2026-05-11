@@ -1,0 +1,343 @@
+{
+  "name": "frontend_dtu6_original_tracks",
+  "quality_config": "configs/quality_config.template.json",
+  "output_root": "runs/paper_v2/frontend_dtu6_original_tracks",
+  "scenes": [
+    {
+      "name": "DTU_scan24",
+      "scene_id": "scan24",
+      "scene_root": "runs/DTU/scan24",
+      "prepared_scene_dir": "data/prepared/DTU/scan24",
+      "frontend_stages": [
+        {
+          "name": "tracks",
+          "cmd": [
+            "{python}", "tools/build_lightglue_tracks_npz.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_glob", "data/raw/DTU/Rectified/{scene_id}/rect_*_3_r5000.png",
+            "--out_dir", "{scene_root}/tracks",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--min_score", "0.0",
+            "--use_ransac",
+            "--ransac_thresh", "1.0",
+            "--min_inliers", "50",
+            "--deltas", "1,2,3,5",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/tracks/track_build_quality_stats.json"]
+        },
+        {
+          "name": "rraa_input",
+          "cmd": [
+            "{python}", "tools/generate_rraa_input.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_npz", "{scene_root}/rraa_input/rraa_input_{scene_id}.npz",
+            "--device", "auto",
+            "--deltas", "1,2,3,5",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--ransac_px", "2.0",
+            "--add_reverse",
+            "--use_h_fallback",
+            "--save_meta",
+            "--save_names",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/rraa_input/rraa_input_{scene_id}.npz"]
+        }
+      ]
+    },
+    {
+      "name": "DTU_scan37",
+      "scene_id": "scan37",
+      "scene_root": "runs/DTU/scan37",
+      "prepared_scene_dir": "data/prepared/DTU/scan37",
+      "frontend_stages": [
+        {
+          "name": "tracks",
+          "cmd": [
+            "{python}", "tools/build_lightglue_tracks_npz.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_glob", "data/raw/DTU/Rectified/{scene_id}/rect_*_3_r5000.png",
+            "--out_dir", "{scene_root}/tracks",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--min_score", "0.0",
+            "--use_ransac",
+            "--ransac_thresh", "1.0",
+            "--min_inliers", "50",
+            "--deltas", "1,2,3,5",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/tracks/track_build_quality_stats.json"]
+        },
+        {
+          "name": "rraa_input",
+          "cmd": [
+            "{python}", "tools/generate_rraa_input.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_npz", "{scene_root}/rraa_input/rraa_input_{scene_id}.npz",
+            "--device", "auto",
+            "--deltas", "1,2,3,5",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--ransac_px", "2.0",
+            "--add_reverse",
+            "--use_h_fallback",
+            "--save_meta",
+            "--save_names",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/rraa_input/rraa_input_{scene_id}.npz"]
+        }
+      ]
+    },
+    {
+      "name": "DTU_scan40",
+      "scene_id": "scan40",
+      "scene_root": "runs/DTU/scan40",
+      "prepared_scene_dir": "data/prepared/DTU/scan40",
+      "frontend_stages": [
+        {
+          "name": "tracks",
+          "cmd": [
+            "{python}", "tools/build_lightglue_tracks_npz.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_glob", "data/raw/DTU/Rectified/{scene_id}/rect_*_3_r5000.png",
+            "--out_dir", "{scene_root}/tracks",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--min_score", "0.0",
+            "--use_ransac",
+            "--ransac_thresh", "1.0",
+            "--min_inliers", "50",
+            "--deltas", "1,2,3,5",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/tracks/track_build_quality_stats.json"]
+        },
+        {
+          "name": "rraa_input",
+          "cmd": [
+            "{python}", "tools/generate_rraa_input.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_npz", "{scene_root}/rraa_input/rraa_input_{scene_id}.npz",
+            "--device", "auto",
+            "--deltas", "1,2,3,5",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--ransac_px", "2.0",
+            "--add_reverse",
+            "--use_h_fallback",
+            "--save_meta",
+            "--save_names",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/rraa_input/rraa_input_{scene_id}.npz"]
+        }
+      ]
+    },
+    {
+      "name": "DTU_scan55",
+      "scene_id": "scan55",
+      "scene_root": "runs/DTU/scan55",
+      "prepared_scene_dir": "data/prepared/DTU/scan55",
+      "frontend_stages": [
+        {
+          "name": "tracks",
+          "cmd": [
+            "{python}", "tools/build_lightglue_tracks_npz.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_glob", "data/raw/DTU/Rectified/{scene_id}/rect_*_3_r5000.png",
+            "--out_dir", "{scene_root}/tracks",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--min_score", "0.0",
+            "--use_ransac",
+            "--ransac_thresh", "1.0",
+            "--min_inliers", "50",
+            "--deltas", "1,2,3,5",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/tracks/track_build_quality_stats.json"]
+        },
+        {
+          "name": "rraa_input",
+          "cmd": [
+            "{python}", "tools/generate_rraa_input.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_npz", "{scene_root}/rraa_input/rraa_input_{scene_id}.npz",
+            "--device", "auto",
+            "--deltas", "1,2,3,5",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--ransac_px", "2.0",
+            "--add_reverse",
+            "--use_h_fallback",
+            "--save_meta",
+            "--save_names",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/rraa_input/rraa_input_{scene_id}.npz"]
+        }
+      ]
+    },
+    {
+      "name": "DTU_scan65",
+      "scene_id": "scan65",
+      "scene_root": "runs/DTU/scan65",
+      "prepared_scene_dir": "data/prepared/DTU/scan65",
+      "frontend_stages": [
+        {
+          "name": "tracks",
+          "cmd": [
+            "{python}", "tools/build_lightglue_tracks_npz.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_glob", "data/raw/DTU/Rectified/{scene_id}/rect_*_3_r5000.png",
+            "--out_dir", "{scene_root}/tracks",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--min_score", "0.0",
+            "--use_ransac",
+            "--ransac_thresh", "1.0",
+            "--min_inliers", "50",
+            "--deltas", "1,2,3,5",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/tracks/track_build_quality_stats.json"]
+        },
+        {
+          "name": "rraa_input",
+          "cmd": [
+            "{python}", "tools/generate_rraa_input.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_npz", "{scene_root}/rraa_input/rraa_input_{scene_id}.npz",
+            "--device", "auto",
+            "--deltas", "1,2,3,5",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--ransac_px", "2.0",
+            "--add_reverse",
+            "--use_h_fallback",
+            "--save_meta",
+            "--save_names",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/rraa_input/rraa_input_{scene_id}.npz"]
+        }
+      ]
+    },
+    {
+      "name": "DTU_scan106",
+      "scene_id": "scan106",
+      "scene_root": "runs/DTU/scan106",
+      "prepared_scene_dir": "data/prepared/DTU/scan106",
+      "frontend_stages": [
+        {
+          "name": "tracks",
+          "cmd": [
+            "{python}", "tools/build_lightglue_tracks_npz.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_glob", "data/raw/DTU/Rectified/{scene_id}/rect_*_3_r5000.png",
+            "--out_dir", "{scene_root}/tracks",
+            "--device", "auto",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--mutual",
+            "--min_score", "0.0",
+            "--use_ransac",
+            "--ransac_thresh", "1.0",
+            "--min_inliers", "50",
+            "--deltas", "1,2,3,5",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/tracks/track_build_quality_stats.json"]
+        },
+        {
+          "name": "rraa_input",
+          "cmd": [
+            "{python}", "tools/generate_rraa_input.py",
+            "--dataset", "custom",
+            "--Ks_npy", "{prepared_scene_dir}/Ks.npy",
+            "--image_K_idx_npy", "{prepared_scene_dir}/image_K_idx.npy",
+            "--image_list", "{prepared_scene_dir}/image_list.txt",
+            "--out_npz", "{scene_root}/rraa_input/rraa_input_{scene_id}.npz",
+            "--device", "auto",
+            "--deltas", "1,2,3,5",
+            "--max_kpts", "2048",
+            "--filter_th", "0.1",
+            "--ransac_px", "2.0",
+            "--add_reverse",
+            "--use_h_fallback",
+            "--save_meta",
+            "--save_names",
+            "--quality_config", "{quality_config}",
+            "--auto_quality_refs",
+            "--dump_quality_stats"
+          ],
+          "reuse_outputs": ["{scene_root}/rraa_input/rraa_input_{scene_id}.npz"]
+        }
+      ]
+    }
+  ]
+}

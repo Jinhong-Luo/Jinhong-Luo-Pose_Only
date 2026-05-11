@@ -1,0 +1,42 @@
+{
+  "name": "paper_benchmark_manifest_strecha6_eth3d4_original_tracks",
+  "defaults": {
+    "output_dir": "runs/paper_v2/eval_rerun_original_tracks",
+    "gt_unit_to_mm": 1000.0
+  },
+  "default_scene_tags": [
+    "strecha6_eth3d4",
+    "rerun_original_tracks"
+  ],
+  "default_experiment_tags": [
+    "main"
+  ],
+  "datasets": [
+    {
+      "name": "strecha",
+      "scenes": [
+        { "scene": "fountain-P11", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/strecha/fountain-P11", "scene_run_root_candidates": ["runs/strecha/fountain-P11"] },
+        { "scene": "entry-P10", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/strecha/entry-P10", "scene_run_root_candidates": ["runs/strecha/entry-P10"] },
+        { "scene": "Herz-Jesus-P8", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/strecha/Herz-Jesus-P8", "scene_run_root_candidates": ["runs/strecha/Herz-Jesus-P8"] },
+        { "scene": "Castle-P19", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/strecha/Castle-P19", "scene_run_root_candidates": ["runs/strecha/Castle-P19"] },
+        { "scene": "Castle-P30", "scene_slug": "strecha_Castle_P30_first29", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/strecha/Castle-P30-first29", "scene_run_root_candidates": ["runs/strecha/Castle-P30-first29"] },
+        { "scene": "Herz-Jesus-P25", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/strecha/Herz-Jesus-P25", "scene_run_root_candidates": ["runs/strecha/Herz-Jesus-P25"] }
+      ]
+    },
+    {
+      "name": "ETH3D",
+      "scenes": [
+        { "scene": "courtyard", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/ETH3D/courtyard", "scene_run_root_candidates": ["runs/ETH3D_repaired/courtyard"] },
+        { "scene": "delivery_area", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/ETH3D/delivery_area", "scene_run_root_candidates": ["runs/ETH3D_repaired/delivery_area"] },
+        { "scene": "office", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/ETH3D/office", "scene_run_root_candidates": ["runs/ETH3D/office"] },
+        { "scene": "terrace", "tags": ["strecha6_eth3d4", "rerun_original_tracks", "main"], "prepared_scene_dir": "data/prepared/ETH3D/terrace", "scene_run_root_candidates": ["runs/ETH3D_repaired/terrace"] }
+      ]
+    }
+  ],
+  "experiment_groups": [
+    { "name": "gt_ligt", "tags": ["main"], "run_dir_candidates": ["runs/paper_v2/rerun_original_tracks/gt_ligt/{scene_slug}"] },
+    { "name": "gt_ligt_pa", "tags": ["main"], "run_dir_candidates": ["runs/paper_v2/rerun_original_tracks/gt_ligt_pa/{scene_slug}"] },
+    { "name": "rraa_ligt", "tags": ["main"], "run_dir_candidates": ["runs/paper_v2/rerun_original_tracks/rraa_ligt/{scene_slug}"] },
+    { "name": "rraa_ligt_pa", "tags": ["main"], "run_dir_candidates": ["runs/paper_v2/rerun_original_tracks/rraa_ligt_pa/{scene_slug}"] }
+  ]
+}

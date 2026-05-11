@@ -17,6 +17,7 @@ from calib_utils import (
 from degeneracy_utils import dump_json, safe_ratio, summarize_array
 from frontend_cache import build_lightglue_frontend, load_or_extract_feature, read_gray_u8, resolve_device
 from lightglue.utils import rbd
+from pair_match_cache import extract_pair_matches, load_pair_match_cache, save_pair_match_cache
 from quality_utils import (
     compute_qpair,
     infer_qpair_config,
@@ -79,29 +80,6 @@ def min_inliers_for_delta(d: int, mp: dict, default: int):
     if d in mp:
         return mp[d]
     return default
-
-
-def get_pair_scores(matches_dict: dict, matches: np.ndarray):
-    """
-    Try to extract a per-match confidence score aligned with matches (M,2).
-    Returns: scores (M,) or None
-    """
-    if matches is None or len(matches) == 0:
-        return None
-
-    # case 1: matching_scores0 is per-kpt score on image0: (K0,)
-    if "matching_scores0" in matches_dict:
-        s0 = to_numpy_cpu(matches_dict["matching_scores0"]).reshape(-1)
-        return s0[matches[:, 0]]
-
-    # case 2: scores already per-match: (M,)
-    for key in ["scores", "matching_scores", "mscores"]:
-        if key in matches_dict:
-            s = to_numpy_cpu(matches_dict[key]).reshape(-1)
-            if s.shape[0] == matches.shape[0]:
-                return s
-
-    return None
 
 
 # -----------------------------
@@ -243,7 +221,9 @@ def estimate_Rij_from_matches_normalized(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", choices=["kitti", "euroc", "custom"], required=True)
-    parser.add_argument("--img_dir", required=True)
+    parser.add_argument("--img_dir", default=None)
+    parser.add_argument("--image_list", default=None,
+                        help="optional text file with one image path per line; if set, overrides --img_dir")
     parser.add_argument("--out_npz", required=True)
 
     # device
@@ -309,6 +289,8 @@ def main():
                         help="Save pair-quality and gap-statistics JSON next to output npz.")
     parser.add_argument("--feature_cache_dir", type=str, default=None,
                         help="optional directory for reusable SuperPoint feature cache")
+    parser.add_argument("--pair_match_cache_dir", type=str, default=None,
+                        help="optional directory for reusable pair raw match cache")
     parser.add_argument("--quality_config", type=str, default=None,
                         help="optional JSON config with a qpair section")
     parser.add_argument("--auto_quality_refs", action="store_true",
@@ -317,7 +299,10 @@ def main():
     args = parser.parse_args()
 
     # expand paths safely
-    args.img_dir = os.path.abspath(os.path.expanduser(args.img_dir))
+    if args.img_dir is not None:
+        args.img_dir = os.path.abspath(os.path.expanduser(args.img_dir))
+    if args.image_list is not None:
+        args.image_list = os.path.abspath(os.path.expanduser(args.image_list))
     args.out_npz = os.path.abspath(os.path.expanduser(args.out_npz))
     if args.K_npy is not None:
         args.K_npy = os.path.abspath(os.path.expanduser(args.K_npy))
@@ -326,7 +311,12 @@ def main():
     if args.euroc_yaml is not None:
         args.euroc_yaml = os.path.abspath(os.path.expanduser(args.euroc_yaml))
 
+    if args.image_list is None and args.img_dir is None:
+        raise ValueError("Either --img_dir or --image_list must be provided")
+
     if args.dataset == "kitti":
+        if args.image_list is not None:
+            raise ValueError("--image_list is not supported for dataset=kitti")
         resolved = resolve_kitti_scene_inputs(
             kitti_calib=args.kitti_calib,
             img_dir=args.img_dir,
@@ -344,7 +334,13 @@ def main():
     print("[Device]", device)
 
     try:
-        image_paths = list_images_sorted(args.img_dir)
+        if args.image_list is not None:
+            with open(args.image_list, "r", encoding="utf-8") as f:
+                image_paths = [line.strip() for line in f if line.strip()]
+            if not image_paths:
+                raise RuntimeError(f"No valid image paths found in {args.image_list}")
+        else:
+            image_paths = list_images_sorted(args.img_dir)
     except RuntimeError as exc:
         if args.dataset == "kitti":
             scene_id = resolved.get("scene_id") if "resolved" in locals() else None
@@ -435,31 +431,42 @@ def main():
 
             feats1 = get_feats(j)
 
-            out = matcher({"image0": feats0, "image1": feats1})
-            feats0r, feats1r, outr = [rbd(x) for x in [feats0, feats1, out]]
+            cached_pair = load_pair_match_cache(args.pair_match_cache_dir, i, j)
+            if cached_pair is not None:
+                matches = cached_pair["matches"]
+                pair_scores = cached_pair["pair_scores"]
+                pts0 = cached_pair.get("pts0")
+                pts1 = cached_pair.get("pts1")
+            else:
+                out = matcher({"image0": feats0, "image1": feats1})
+                matches, pair_scores = extract_pair_matches(out, mutual=False)
+                kpts0 = to_numpy_cpu(rbd(feats0)["keypoints"])
+                kpts1 = to_numpy_cpu(rbd(feats1)["keypoints"])
+                pts0 = kpts0[matches[:, 0]] if matches.shape[0] > 0 else np.zeros((0, 2), dtype=np.float32)
+                pts1 = kpts1[matches[:, 1]] if matches.shape[0] > 0 else np.zeros((0, 2), dtype=np.float32)
+                if args.pair_match_cache_dir:
+                    save_pair_match_cache(args.pair_match_cache_dir, i, j, matches, pair_scores, pts0, pts1)
 
-            matches_t = outr.get("matches", None)
-            if matches_t is None:
-                continue
-
-            matches = to_numpy_cpu(matches_t).astype(np.int64)
             if matches.shape[0] < 8:
                 continue
 
             # optional score-based prefilter
-            pair_scores = get_pair_scores(outr, matches)
             if pair_scores is not None and args.min_match_score > 0:
                 keep = pair_scores >= args.min_match_score
                 matches = matches[keep]
                 if matches.shape[0] < 8:
                     continue
                 pair_scores = pair_scores[keep]
+                if pts0 is not None:
+                    pts0 = pts0[keep]
+                if pts1 is not None:
+                    pts1 = pts1[keep]
 
-            kpts0 = to_numpy_cpu(feats0r["keypoints"])
-            kpts1 = to_numpy_cpu(feats1r["keypoints"])
-
-            pts0 = kpts0[matches[:, 0]]
-            pts1 = kpts1[matches[:, 1]]
+            if pts0 is None or pts1 is None:
+                kpts0 = to_numpy_cpu(rbd(feats0)["keypoints"])
+                kpts1 = to_numpy_cpu(rbd(feats1)["keypoints"])
+                pts0 = kpts0[matches[:, 0]]
+                pts1 = kpts1[matches[:, 1]]
 
             min_inl = min_inliers_for_delta(d, mp, default_inl)
 

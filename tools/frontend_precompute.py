@@ -8,7 +8,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
 def load_structured_config(path: str) -> Dict[str, Any]:
