@@ -1,0 +1,303 @@
+{
+  "name": "paper_clean_main_ablation_matrix",
+  "base_template_config": "configs/paper_v2/compare12_split_v2_final_nofallback_plus_gap8.json",
+  "output_root_base": "runs/paper_v2/ablation_clean_main",
+  "scenes": "configs/paper_v2/scenes_strecha6_dtu6_12scenes.json",
+  "maps": {
+    "uniform": "1:30,2:30,3:30,4:30,5:30,8:30,13:30,default:30"
+  },
+  "defaults": {
+    "deltas_tracks": "1,2,3",
+    "deltas_rraa": "1,2,3,5",
+    "min_score": 0.0,
+    "min_inliers_tracks": 30,
+    "qpair_mode_tracks": "weighted_sum",
+    "ransac_px": 1.0,
+    "min_inliers_map": "1:30,2:30,3:30,4:30,5:30,8:30,13:30,default:30",
+    "irls_iters": 0,
+    "irls_huber_k": 1.5
+  },
+  "runs": [
+    {
+      "id": "A0_minimal_chain",
+      "table": "A",
+      "description": "Minimal-Paper-Base: chain tracks and chain RRAA graph",
+      "output_subdir": "A/A0_minimal_chain",
+      "params": {
+        "deltas_tracks": "1",
+        "deltas_rraa": "1"
+      }
+    },
+    {
+      "id": "A1_tracks_span_only",
+      "table": "A",
+      "description": "Only enlarge the track-building graph span",
+      "output_subdir": "A/A1_tracks_span_only",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1"
+      }
+    },
+    {
+      "id": "A2_short_rraa_graph",
+      "table": "A",
+      "description": "Short-range RRAA graph",
+      "output_subdir": "A/A2_short_rraa_graph",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3"
+      }
+    },
+    {
+      "id": "A3_paper_base",
+      "table": "A",
+      "description": "Paper-Base: short/mid RRAA graph",
+      "output_subdir": "A/A3_paper_base",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5"
+      }
+    },
+    {
+      "id": "A4_gap8_uniform",
+      "table": "A",
+      "description": "Add long-gap RRAA graph while keeping uniform admission and no IRLS",
+      "output_subdir": "A/A4_gap8_uniform",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5,8"
+      }
+    },
+    {
+      "id": "A5_gap13_optional",
+      "table": "A",
+      "description": "Optional over-long RRAA graph check",
+      "output_subdir": "A/A5_gap13_optional",
+      "optional": true,
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5,8,13"
+      }
+    },
+    {
+      "id": "T0_tracks_chain_rraa_gap8",
+      "table": "T",
+      "description": "Track-span sensitivity: chain tracks with fixed gap8 RRAA graph",
+      "output_subdir": "T/T0_tracks_chain_rraa_gap8",
+      "params": {
+        "deltas_tracks": "1",
+        "deltas_rraa": "1,2,3,5,8"
+      }
+    },
+    {
+      "id": "T2_tracks_1235_rraa_gap8",
+      "table": "T",
+      "description": "Track-span sensitivity: add gap5 tracks with fixed gap8 RRAA graph",
+      "output_subdir": "T/T2_tracks_1235_rraa_gap8",
+      "params": {
+        "deltas_tracks": "1,2,3,5",
+        "deltas_rraa": "1,2,3,5,8"
+      }
+    },
+    {
+      "id": "T3_tracks_12358_rraa_gap8",
+      "table": "T",
+      "description": "Track-span sensitivity: add gap8 tracks with fixed gap8 RRAA graph",
+      "output_subdir": "T/T3_tracks_12358_rraa_gap8",
+      "params": {
+        "deltas_tracks": "1,2,3,5,8",
+        "deltas_rraa": "1,2,3,5,8"
+      }
+    },
+    {
+      "id": "T4_tracks_1235813_rraa_gap8_optional",
+      "table": "T",
+      "description": "Track-span sensitivity: over-long track span with fixed gap8 RRAA graph",
+      "output_subdir": "T/T4_tracks_1235813_rraa_gap8_optional",
+      "optional": true,
+      "params": {
+        "deltas_tracks": "1,2,3,5,8,13",
+        "deltas_rraa": "1,2,3,5,8"
+      }
+    },
+    {
+      "id": "I1_gap8_irls1_huber15",
+      "table": "I",
+      "description": "A4 uniform backbone with one LiGT IRLS iteration",
+      "output_subdir": "I/I1_gap8_irls1_huber15",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5,8",
+        "irls_iters": 1,
+        "irls_huber_k": 1.5
+      }
+    },
+    {
+      "id": "I2_gap8_irls2_huber15",
+      "table": "I",
+      "description": "A4 uniform backbone with two LiGT IRLS iterations",
+      "output_subdir": "I/I2_gap8_irls2_huber15",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5,8",
+        "irls_iters": 2,
+        "irls_huber_k": 1.5
+      }
+    },
+    {
+      "id": "I3_gap8_irls1_huber20_optional",
+      "table": "I",
+      "description": "Optional Huber-k sensitivity on the A4 uniform backbone",
+      "output_subdir": "I/I3_gap8_irls1_huber20_optional",
+      "optional": true,
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5,8",
+        "irls_iters": 1,
+        "irls_huber_k": 2.0
+      }
+    },
+    {
+      "id": "M4_gap8_irls2_pa",
+      "table": "M",
+      "description": "A4 + IRLS(2), k=1.5 with translation-only PA refinement",
+      "output_subdir": "M/M4_gap8_irls2_pa",
+      "params": {
+        "deltas_tracks": "1,2,3",
+        "deltas_rraa": "1,2,3,5,8",
+        "irls_iters": 2,
+        "irls_huber_k": 1.5,
+        "run_pa": true,
+        "pa_no_refine_rot": true,
+        "pa_iters": 3,
+        "pa_point_rms": 0.005,
+        "pa_max_nfev": 50,
+        "pa_loss": "soft_l1",
+        "pa_f_scale": 0.001,
+        "pa_accept_any_update": false
+      }
+    }
+  ],
+  "logical_tables": {
+    "M_main_cumulative": [
+      {
+        "label": "M0",
+        "title": "A3 Paper-Base",
+        "source_run_id": "A3_paper_base"
+      },
+      {
+        "label": "M1",
+        "title": "A4 gap8",
+        "source_run_id": "A4_gap8_uniform"
+      },
+      {
+        "label": "M2",
+        "title": "A4 + IRLS(1), k=1.5",
+        "source_run_id": "I1_gap8_irls1_huber15"
+      },
+      {
+        "label": "M3",
+        "title": "A4 + IRLS(2), k=1.5 / staged-search selected",
+        "source_run_id": "I2_gap8_irls2_huber15"
+      },
+      {
+        "label": "M4",
+        "title": "M3 + translation-only PA",
+        "source_run_id": "M4_gap8_irls2_pa"
+      }
+    ],
+    "A_graph_span": [
+      {
+        "label": "A0",
+        "source_run_id": "A0_minimal_chain"
+      },
+      {
+        "label": "A1",
+        "source_run_id": "A1_tracks_span_only"
+      },
+      {
+        "label": "A2",
+        "source_run_id": "A2_short_rraa_graph"
+      },
+      {
+        "label": "A3",
+        "source_run_id": "A3_paper_base"
+      },
+      {
+        "label": "A4",
+        "source_run_id": "A4_gap8_uniform"
+      },
+      {
+        "label": "A5",
+        "source_run_id": "A5_gap13_optional"
+      }
+    ],
+    "T_track_span_sensitivity": [
+      {
+        "label": "T0",
+        "title": "tracks 1 / RRAA gap8",
+        "source_run_id": "T0_tracks_chain_rraa_gap8"
+      },
+      {
+        "label": "T1",
+        "title": "tracks 1,2,3 / RRAA gap8 (A4)",
+        "source_run_id": "A4_gap8_uniform"
+      },
+      {
+        "label": "T2",
+        "title": "tracks 1,2,3,5 / RRAA gap8",
+        "source_run_id": "T2_tracks_1235_rraa_gap8"
+      },
+      {
+        "label": "T3",
+        "title": "tracks 1,2,3,5,8 / RRAA gap8",
+        "source_run_id": "T3_tracks_12358_rraa_gap8"
+      },
+      {
+        "label": "T4",
+        "title": "tracks 1,2,3,5,8,13 / RRAA gap8",
+        "source_run_id": "T4_tracks_1235813_rraa_gap8_optional"
+      }
+    ],
+    "I_irls": [
+      {
+        "label": "I0",
+        "source_run_id": "A4_gap8_uniform"
+      },
+      {
+        "label": "I1",
+        "source_run_id": "I1_gap8_irls1_huber15"
+      },
+      {
+        "label": "I2",
+        "source_run_id": "I2_gap8_irls2_huber15"
+      },
+      {
+        "label": "I3",
+        "source_run_id": "I3_gap8_irls1_huber20_optional"
+      }
+    ],
+    "S_staged_search_effect": [
+      {
+        "label": "P0",
+        "title": "Paper-Base",
+        "source_run_id": "A3_paper_base"
+      },
+      {
+        "label": "P1",
+        "title": "Stage-1 selected graph",
+        "source_run_id": "A4_gap8_uniform"
+      },
+      {
+        "label": "P2",
+        "title": "Stage-1 graph + IRLS(1)",
+        "source_run_id": "I1_gap8_irls1_huber15"
+      },
+      {
+        "label": "P3",
+        "title": "Stage-1 graph + Stage-2 selected IRLS",
+        "source_run_id": "I2_gap8_irls2_huber15"
+      }
+    ]
+  }
+}

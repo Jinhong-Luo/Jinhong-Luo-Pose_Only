@@ -1,0 +1,58 @@
+{
+  "qpair": {
+    "weights": {
+      "inlier_ratio": 0.35,
+      "ninliers": 0.3,
+      "score": 0.2,
+      "gap": 0.1,
+      "method": 0.05
+    },
+    "inlier_ratio_ref": 0.6,
+    "ninliers_ref": 80.0,
+    "gap_alpha": 0.25,
+    "homography_factor": 0.7,
+    "score_default": 0.5
+  },
+  "qtrack": {
+    "weights": {
+      "length": 0.2,
+      "pair_mean": 0.3,
+      "pair_min": 0.15,
+      "base_u": 0.2,
+      "g_stat": 0.15
+    },
+    "track_len_ref": 6.0,
+    "base_u_ref": 0.02,
+    "g_ref": 0.02
+  },
+  "rraa": {
+    "enable_quality_weighting": true,
+    "rraa_use_qpair_weight": true,
+    "qpair_threshold": 0.2
+  },
+  "notes": {
+    "usage": "Pass this file with --quality_config. Combine with --auto_quality_refs to adapt reference scales to the current scene.",
+    "editing": "Keep weights summing roughly to 1.0 for easier interpretation, though exact normalization is not required.",
+    "parameter_layers": {
+      "auto_reference": [
+        "qpair.inlier_ratio_ref",
+        "qpair.ninliers_ref",
+        "qtrack.track_len_ref",
+        "qtrack.base_u_ref",
+        "qtrack.g_ref"
+      ],
+      "validation_search": [
+        "rraa.qpair_threshold",
+        "poseonly.qtrack_threshold",
+        "poseonly.u_min",
+        "poseonly.g_min"
+      ],
+      "fixed_defaults": [
+        "qpair_mode=weighted_sum",
+        "qtrack_mode=weighted_sum",
+        "RRAA loss=l1_2",
+        "PA loss=soft_l1"
+      ]
+    }
+  }
+}

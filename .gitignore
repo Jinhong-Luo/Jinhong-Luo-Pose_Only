@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Raw data and bulky intermediate data
+data/raw/
+data/processed/
+
+# Experiment outputs
+runs/
+outputs/
+logs/
+archive/
+
+# Cache
+.cache/
+*.log
+
+# Large third-party stuff if needed
+third_party/
+third_party/**/weights/
+third_party/**/checkpoints/
+
+# Prepared data is kept locally and not pushed by default
+data/prepared/
+
+# Local COLMAP outputs and AI paper bundles
+Colmap_runs/
+paper_ai_bundle/
+paper_ai_bundle*.zip
+
+# Final minimal GitHub release allowlist.
+# Keep local exploratory paper-v2 files available, but do not upload them by default.
+configs/paper_v2/*.json
+!configs/paper_v2/experiments_ablation_clean_main.json
+!configs/paper_v2/scenes_strecha4_dtu4_dev8_v2.json
+!configs/paper_v2/scenes_strecha2_dtu2_holdout4_v2.json
+!configs/paper_v2/scenes_strecha6_dtu6_12scenes.json
+
+configs/paper_v2/staged_search/*.json
+!configs/paper_v2/staged_search/stage1_graph_span_dev8_v2.json
+!configs/paper_v2/staged_search/stage2_irls_on_A4_uniform_dev8_v2.json
+
+scripts/paper_v2/*
+!scripts/paper_v2/run_ablation_clean_main.ps1
+!scripts/paper_v2/run_experiment_matrix.ps1
+!scripts/paper_v2/plot_stage1_graph_span_search.ps1
+!scripts/paper_v2/plot_stage2_irls_search.ps1
+
+tools/*
+!tools/RRAA_fast.py
+!tools/Pose_Only_patched_v3_fixed.py
+!tools/run_build_tracks_with_autok.py
+!tools/run_generate_rraa_input_with_autok.py
+!tools/run_poseonly_with_flags.py
+!tools/build_lightglue_tracks_npz.py
+!tools/generate_rraa_input.py
+!tools/experiment_summary.py
+!tools/eval_rraa_rotation.py
+!tools/eval_poseonly_strecha_mm.py
+!tools/generate_ablation_clean_tables.py
+!tools/export_ablation_paper_ready_tables.py
+!tools/export_m3_m4_scene_metrics.py
+!tools/export_colmap_pose_errors.py
+!tools/export_selected_external_comparison_tables.py
+!tools/plot_stage1_graph_span_search.py
+!tools/plot_stage2_irls_search.py
+!tools/plot_staged_search_split_zh.py
+!tools/frontend_cache.py
+!tools/frontend_precompute.py
+!tools/pair_match_cache.py
+!tools/quality_utils.py
+!tools/calib_utils.py
+!tools/degeneracy_utils.py
